@@ -1,3 +1,4 @@
+"""Tests for Gemini image vision functionality."""
 import asyncio
 import base64
 import io
@@ -21,6 +22,16 @@ Laminar.initialize()
 
 
 def create_random_text_image(text: str = 'hello world', width: int = 4000, height: int = 4000) -> str:
+	"""Create a random text image for testing vision models.
+	
+	Args:
+		text: Text to display on the image.
+		width: Image width in pixels.
+		height: Image height in pixels.
+		
+	Returns:
+		Base64 encoded image string.
+	"""
 	# Create image with random background color
 	bg_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 	image = Image.new('RGB', (width, height), bg_color)
@@ -53,7 +64,6 @@ def create_random_text_image(text: str = 'hello world', width: int = 4000, heigh
 
 async def test_gemini_image_vision():
 	"""Test Gemini's ability to see and describe images."""
-
 	# Create the LLM
 	llm = ChatGoogle(model='gemini-2.0-flash-exp')
 

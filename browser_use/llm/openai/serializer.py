@@ -1,3 +1,4 @@
+"""OpenAI message serialization utilities."""
 from typing import overload
 
 from openai.types.chat import (
@@ -117,7 +118,6 @@ class OpenAIMessageSerializer:
 	@staticmethod
 	def serialize(message: BaseMessage) -> ChatCompletionMessageParam:
 		"""Serialize a custom message to an OpenAI message param."""
-
 		if isinstance(message, UserMessage):
 			user_result: ChatCompletionUserMessageParam = {
 				'role': 'user',
@@ -162,4 +162,5 @@ class OpenAIMessageSerializer:
 
 	@staticmethod
 	def serialize_messages(messages: list[BaseMessage]) -> list[ChatCompletionMessageParam]:
+		"""Serialize a list of BaseMessages to OpenAI's message format."""
 		return [OpenAIMessageSerializer.serialize(m) for m in messages]

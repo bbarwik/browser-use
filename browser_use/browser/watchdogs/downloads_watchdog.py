@@ -55,6 +55,7 @@ class DownloadsWatchdog(BaseWatchdog):
 	_cdp_downloads_info: dict[str, dict[str, Any]] = PrivateAttr(default_factory=dict)  # Map guid -> info
 
 	async def on_BrowserLaunchEvent(self, event: BrowserLaunchEvent) -> None:
+		"""Ensure downloads directory exists when browser launches."""
 		self.logger.debug(f'[DownloadsWatchdog] Received BrowserLaunchEvent, EventBus ID: {id(self.event_bus)}')
 		# Ensure downloads directory exists
 		downloads_path = self.browser_session.browser_profile.downloads_path
@@ -163,6 +164,7 @@ class DownloadsWatchdog(BaseWatchdog):
 
 				# Register download event handlers
 				async def download_will_begin_handler(event: DownloadWillBeginEvent, session_id: SessionID | None):
+					"""Handle download will begin events from CDP."""
 					self.logger.debug(f'[DownloadsWatchdog] Download will begin: {event}')
 					# Cache info for later completion event handling (esp. remote browsers)
 					guid = event.get('guid', '')
@@ -182,6 +184,7 @@ class DownloadsWatchdog(BaseWatchdog):
 					task.add_done_callback(lambda t: self._cdp_event_tasks.discard(t))
 
 				async def download_progress_handler(event: DownloadProgressEvent, session_id: SessionID | None):
+					"""Handle download progress events from CDP."""
 					# Check if download is complete
 					if event.get('state') == 'completed':
 						file_path = event.get('filePath')

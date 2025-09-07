@@ -1,3 +1,4 @@
+"""Groq response parsing utilities."""
 import json
 import logging
 import re
@@ -12,6 +13,7 @@ T = TypeVar('T', bound=BaseModel)
 
 
 class ParseFailedGenerationError(Exception):
+	"""Raised when Groq response parsing fails."""
 	pass
 
 

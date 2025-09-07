@@ -1,3 +1,79 @@
+"""Browser-Use command-line interface module.
+
+@public
+
+This module provides both interactive textual and prompt-based CLI interfaces
+for the browser-use library, allowing users to interact with AI agents that
+can control web browsers.
+
+CLI Modes:
+	TUI Mode (default): Interactive terminal UI with chat interface
+		- Run without arguments: `browser-use`
+		- Live browser control with visual feedback
+		- Command history and suggestions
+		- Keyboard shortcuts for navigation
+		
+	One-Shot Mode: Execute single task and exit
+		- Use -p/--prompt flag: `browser-use -p "search for Python docs"`
+		- Automatically enables headless browser
+		- Returns results to stdout
+		- Good for scripting and automation
+		
+	MCP Server Mode: Run as Model Context Protocol server
+		- Use --mcp flag: `browser-use --mcp`
+		- Exposes JSON-RPC via stdin/stdout
+		- Integrates with MCP-compatible clients
+		- Enables browser control from other applications
+
+Command-Line Flags:
+	--version: Print version and exit
+	--model: LLM model name (gpt-4, claude-3-5-sonnet, gemini-2.0-flash)
+	--debug: Enable verbose startup logging
+	--headless: Run browser without UI (default for one-shot mode)
+	--window-width: Browser window width in pixels
+	--window-height: Browser window height in pixels
+	--user-data-dir: Chrome user data directory path
+	--profile-directory: Chrome profile name ("Default", "Profile 1")
+	--cdp-url: Connect to existing Chrome via CDP (http://localhost:9222)
+	--proxy-url: Proxy server URL (http://host:8080, socks5://host:1080)
+	--no-proxy: Comma-separated hosts to bypass proxy
+	--proxy-username: Proxy authentication username
+	--proxy-password: Proxy authentication password
+	-p/--prompt: Run single task without TUI
+	--mcp: Run as MCP server
+
+Configuration:
+	Config File: ~/.config/browseruse/config.json
+	Command History: ~/.config/browseruse/command_history.json
+	Browser Profiles: ~/.config/browseruse/profiles/
+	
+	Environment Variable Overrides:
+		BROWSER_USE_CONFIG_DIR: Change config directory location
+		BROWSER_USE_CONFIG_PATH: Use specific config file
+		BROWSER_USE_LOGGING_LEVEL: Set log verbosity
+		
+	All LLM API keys are read from environment variables:
+		OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY, etc.
+
+Examples:
+	# Interactive TUI mode
+	browser-use
+	
+	# One-shot task execution
+	browser-use -p "Find the latest Python documentation"
+	
+	# Use specific model
+	browser-use --model claude-3-5-sonnet
+	
+	# Connect to existing Chrome
+	browser-use --cdp-url http://localhost:9222
+	
+	# Run with proxy
+	browser-use --proxy-url http://proxy:8080 --proxy-username user
+	
+	# MCP server mode
+	browser-use --mcp
+"""
 # pyright: reportMissingImports=false
 import asyncio
 import json
@@ -253,6 +329,11 @@ class RichLogHandler(logging.Handler):
 		self.rich_log = rich_log
 
 	def emit(self, record):
+		"""Emit a log record to the RichLog widget.
+		
+		Args:
+			record: The LogRecord to emit.
+		"""
 		try:
 			msg = self.format(record)
 			self.rich_log.write(msg)
@@ -870,6 +951,7 @@ class BrowserUseApp(App):
 
 		# Let the agent run in the background
 		async def agent_task_worker() -> None:
+			"""Background worker that executes agent tasks."""
 			logger.debug('\n🚀 Working on task: %s', task)
 
 			# Set flags to indicate the agent is running
@@ -1466,6 +1548,7 @@ async def textual_interface(config: dict[str, Any]):
 
 	# Set up logging for Textual UI - prevent any logging to stdout
 	def setup_textual_logging():
+		"""Configure logging for the Textual UI to prevent interference with display."""
 		# Replace all handlers with null handler
 		root_logger = logging.getLogger()
 		for handler in root_logger.handlers:
@@ -1605,7 +1688,6 @@ def main(ctx: click.Context, debug: bool = False, **kwargs):
 	Use --profile-directory to specify which profile within the user data directory.
 	Examples: "Default", "Profile 1", "Profile 2", etc.
 	"""
-
 	if kwargs['version']:
 		from importlib.metadata import version
 

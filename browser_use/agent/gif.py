@@ -1,3 +1,4 @@
+"""Agent history GIF creation utilities."""
 from __future__ import annotations
 
 import base64
@@ -19,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 def decode_unicode_escapes_to_utf8(text: str) -> str:
 	"""Handle decoding any unicode escape sequences embedded in a string (needed to render non-ASCII languages like chinese or arabic in the GIF overlay text)"""
-
 	if r'\u' not in text:
 		# doesn't have any escape sequences that need to be decoded
 		return text
@@ -295,7 +295,6 @@ def _add_overlay_to_image(
 	text_box_color: tuple[int, int, int, int] = (0, 0, 0, 255),
 ) -> Image.Image:
 	"""Add step number and goal overlay to an image."""
-
 	from PIL import Image, ImageDraw
 
 	goal_text = decode_unicode_escapes_to_utf8(goal_text)
@@ -383,8 +382,7 @@ def _add_overlay_to_image(
 
 
 def _wrap_text(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> str:
-	"""
-	Wrap text to fit within a given width.
+	"""Wrap text to fit within a given width.
 
 	Args:
 	    text: Text to wrap

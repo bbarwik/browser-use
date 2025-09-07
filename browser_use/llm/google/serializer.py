@@ -1,3 +1,4 @@
+"""Google AI message serialization utilities."""
 import base64
 
 from google.genai.types import Content, ContentListUnion, Part
@@ -15,8 +16,7 @@ class GoogleMessageSerializer:
 
 	@staticmethod
 	def serialize_messages(messages: list[BaseMessage]) -> tuple[ContentListUnion, str | None]:
-		"""
-		Convert a list of BaseMessages to Google format, extracting system message.
+		"""Convert a list of BaseMessages to Google format, extracting system message.
 
 		Google handles system instructions separately from the conversation, so we need to:
 		1. Extract any system messages and return them separately as a string
@@ -30,7 +30,6 @@ class GoogleMessageSerializer:
 		    - formatted_messages: List of Content objects for the conversation
 		    - system_message: System instruction string or None
 		"""
-
 		messages = [m.model_copy(deep=True) for m in messages]
 
 		formatted_messages: ContentListUnion = []

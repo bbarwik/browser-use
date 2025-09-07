@@ -55,6 +55,10 @@ class OldConfig:
 		return os.getenv('BROWSER_USE_LOGGING_LEVEL', 'info').lower()
 
 	@property
+	def CDP_LOGGING_LEVEL(self) -> str:
+		return os.getenv('CDP_LOGGING_LEVEL', 'WARNING')
+
+	@property
 	def ANONYMIZED_TELEMETRY(self) -> bool:
 		return os.getenv('ANONYMIZED_TELEMETRY', 'true').lower()[:1] in 'ty1'
 
@@ -87,6 +91,23 @@ class OldConfig:
 
 	@property
 	def BROWSER_USE_CONFIG_DIR(self) -> Path:
+		"""The configuration directory for browser-use.
+		
+		@public
+		
+		Returns the path to browser-use's configuration directory where config files,
+		profiles, and extensions are stored. Defaults to ~/.config/browseruse but can
+		be overridden with the BROWSER_USE_CONFIG_DIR environment variable.
+		
+		Returns:
+			Path: The absolute path to the browser-use configuration directory.
+			
+		Example:
+			>>> from browser_use import CONFIG
+			>>> config_dir = CONFIG.BROWSER_USE_CONFIG_DIR
+			>>> print(config_dir)
+			/home/user/.config/browseruse
+		"""
 		path = Path(os.getenv('BROWSER_USE_CONFIG_DIR', str(self.XDG_CONFIG_HOME / 'browseruse'))).expanduser().resolve()
 		self._ensure_dirs()
 		return path
@@ -156,6 +177,31 @@ class OldConfig:
 		return os.getenv('AZURE_OPENAI_KEY', '')
 
 	@property
+	def AZURE_OPENAI_API_VERSION(self) -> str:
+		return os.getenv('AZURE_OPENAI_API_VERSION', '')
+
+	@property
+	def AZURE_OPENAI_DEPLOYMENT(self) -> str:
+		return os.getenv('AZURE_OPENAI_DEPLOYMENT', '')
+
+	# AWS Bedrock configuration
+	@property
+	def AWS_ACCESS_KEY_ID(self) -> str:
+		return os.getenv('AWS_ACCESS_KEY_ID', '')
+
+	@property
+	def AWS_SECRET_ACCESS_KEY(self) -> str:
+		return os.getenv('AWS_SECRET_ACCESS_KEY', '')
+
+	@property
+	def AWS_REGION(self) -> str:
+		return os.getenv('AWS_REGION', '')
+
+	@property
+	def AWS_BEDROCK_MODEL_ID(self) -> str:
+		return os.getenv('AWS_BEDROCK_MODEL_ID', '')
+
+	@property
 	def SKIP_LLM_API_KEY_VERIFICATION(self) -> bool:
 		return os.getenv('SKIP_LLM_API_KEY_VERIFICATION', 'false').lower()[:1] in 'ty1'
 
@@ -174,7 +220,71 @@ class OldConfig:
 
 
 class FlatEnvConfig(BaseSettings):
-	"""All environment variables in a flat namespace."""
+	"""All environment variables in a flat namespace.
+	
+	@public
+	
+	Configuration for browser-use via environment variables. All settings can be
+	configured through environment variables or a .env file.
+	
+	Environment Variables:
+		Logging & Debugging:
+			BROWSER_USE_LOGGING_LEVEL: Log level (debug, info, warning, error) - default: info
+			CDP_LOGGING_LEVEL: Chrome DevTools Protocol log level - default: WARNING
+			
+		Telemetry & Privacy:
+			ANONYMIZED_TELEMETRY: Enable anonymous usage stats (true/false) - default: true
+				Set to false to disable all telemetry collection
+			BROWSER_USE_CLOUD_SYNC: Enable cloud sync of sessions - default: same as ANONYMIZED_TELEMETRY
+			BROWSER_USE_CLOUD_API_URL: Cloud API endpoint - default: https://api.browser-use.com
+			
+		LLM API Keys:
+			OPENAI_API_KEY: OpenAI API key for GPT models
+			ANTHROPIC_API_KEY: Anthropic API key for Claude models
+			GOOGLE_API_KEY: Google API key for Gemini models (formerly GEMINI_API_KEY)
+			DEEPSEEK_API_KEY: DeepSeek API key
+			GROK_API_KEY: Grok/xAI API key
+			NOVITA_API_KEY: Novita AI API key
+			
+		Azure OpenAI:
+			AZURE_OPENAI_ENDPOINT: Azure OpenAI endpoint URL
+			AZURE_OPENAI_KEY: Azure OpenAI API key
+			AZURE_OPENAI_API_VERSION: API version (e.g., "2024-02-15-preview")
+			AZURE_OPENAI_DEPLOYMENT: Deployment name
+			
+		AWS Bedrock:
+			AWS_ACCESS_KEY_ID: AWS access key
+			AWS_SECRET_ACCESS_KEY: AWS secret key
+			AWS_REGION: AWS region (e.g., "us-east-1")
+			AWS_BEDROCK_MODEL_ID: Model ID for Bedrock
+			
+		Configuration Paths:
+			BROWSER_USE_CONFIG_DIR: Config directory - default: ~/.config/browseruse
+			BROWSER_USE_CONFIG_PATH: Config file path - default: {CONFIG_DIR}/config.json
+			XDG_CONFIG_HOME: XDG config base - default: ~/.config
+			XDG_CACHE_HOME: XDG cache base - default: ~/.cache
+			
+		Runtime Settings:
+			IN_DOCKER: Running in Docker container (auto-detected)
+			IS_IN_EVALS: Running evaluation tests
+			SKIP_LLM_API_KEY_VERIFICATION: Skip API key validation
+			WIN_FONT_DIR: Windows font directory - default: C:\\Windows\\Fonts
+	
+	Example .env file:
+		```
+		BROWSER_USE_LOGGING_LEVEL=debug
+		ANONYMIZED_TELEMETRY=false
+		OPENAI_API_KEY=sk-...
+		ANTHROPIC_API_KEY=sk-ant-...
+		```
+	
+	Usage:
+		>>> from browser_use.config import CONFIG
+		>>> print(CONFIG.BROWSER_USE_LOGGING_LEVEL)
+		info
+		>>> print(CONFIG.OPENAI_API_KEY)
+		sk-...
+	"""
 
 	model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8', case_sensitive=True, extra='allow')
 
@@ -202,7 +312,15 @@ class FlatEnvConfig(BaseSettings):
 	NOVITA_API_KEY: str = Field(default='')
 	AZURE_OPENAI_ENDPOINT: str = Field(default='')
 	AZURE_OPENAI_KEY: str = Field(default='')
+	AZURE_OPENAI_API_VERSION: str = Field(default='')
+	AZURE_OPENAI_DEPLOYMENT: str = Field(default='')
 	SKIP_LLM_API_KEY_VERIFICATION: bool = Field(default=False)
+
+	# AWS Bedrock
+	AWS_ACCESS_KEY_ID: str = Field(default='')
+	AWS_SECRET_ACCESS_KEY: str = Field(default='')
+	AWS_REGION: str = Field(default='')
+	AWS_BEDROCK_MODEL_ID: str = Field(default='')
 
 	# Runtime hints
 	IN_DOCKER: bool | None = Field(default=None)
@@ -338,6 +456,8 @@ def load_and_migrate_config(config_path: Path) -> DBStyleConfigJSON:
 
 class Config:
 	"""Backward-compatible configuration class that merges all config sources.
+
+	@public
 
 	Re-reads environment variables on every access to maintain compatibility.
 	"""

@@ -1,3 +1,4 @@
+"""DeepSeek message serialization utilities."""
 from __future__ import annotations
 
 import json
@@ -83,6 +84,7 @@ class DeepSeekMessageSerializer:
 
 	@staticmethod
 	def serialize(message: BaseMessage) -> MessageDict:
+		"""Serialize a single BaseMessage to DeepSeek's message format."""
 		if isinstance(message, UserMessage):
 			return {
 				'role': 'user',
@@ -106,4 +108,5 @@ class DeepSeekMessageSerializer:
 	# -------- 列表序列化 -----------------------------------------------------
 	@staticmethod
 	def serialize_messages(messages: list[BaseMessage]) -> list[MessageDict]:
+		"""Serialize a list of BaseMessages to DeepSeek's message format."""
 		return [DeepSeekMessageSerializer.serialize(m) for m in messages]

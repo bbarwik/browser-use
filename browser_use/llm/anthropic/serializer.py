@@ -1,3 +1,4 @@
+"""Anthropic message serialization utilities."""
 import json
 from typing import overload
 

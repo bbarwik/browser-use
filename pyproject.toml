@@ -103,11 +103,25 @@ skip = "*.json"
 [tool.ruff]
 line-length = 130
 fix = true
+target-version = "py311"
+preview = true  # Required for DOC (pydoclint-derived) rules
 
 [tool.ruff.lint]
-select = ["ASYNC", "E", "F", "FAST", "I", "PLE"]
-ignore = ["ASYNC109", "E101", "E402", "E501", "F841", "E731", "W291"]  # TODO: determine if adding timeouts to all the unbounded async functions is needed / worth-it so we can un-ignore ASYNC109
+select = ["ASYNC", "E", "F", "FAST", "I", "PLE", "D", "DOC"]
+# Keep existing ignores but remove D-related ones we want to enforce
+ignore = ["ASYNC109", "E101", "E402", "E501", "F841", "E731", "W291", "DOC502"]  # DOC502 has false positives with section headers
 unfixable = ["E101", "E402", "E501", "F841", "E731"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Exclude tests from documentation requirements
+"tests/**/*.py" = ["D", "DOC"]
+# Exclude examples from documentation requirements  
+"examples/**/*.py" = ["D", "DOC"]
+# Allow missing docstrings in __init__ files
+"**/__init__.py" = ["D104"]
 
 [tool.ruff.format]
 quote-style = "single"
@@ -116,6 +130,22 @@ line-ending = "lf"
 docstring-code-format = true
 docstring-code-line-length = 140
 skip-magic-trailing-comma = false
+
+[tool.interrogate]
+fail-under = 100
+verbose = 1
+exclude = ["tests", "examples", ".venv", "venv", "build", "dist", "browser_use/dom/playground"]
+ignore-init-method = true
+ignore-init-module = false
+ignore-magic = true
+ignore-module = false
+ignore-nested-functions = true
+ignore-nested-classes = true
+ignore-overloaded-functions = true
+ignore-private = true
+ignore-property-decorators = true
+ignore-semiprivate = true
+ignore-setters = true
 
 [tool.pyright]
 typeCheckingMode = "basic"

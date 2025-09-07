@@ -1,3 +1,4 @@
+"""DOM tree serialization for LLM consumption."""
 # @file purpose: Serializes enhanced DOM trees to string format for LLM consumption
 
 
@@ -54,6 +55,7 @@ class DOMTreeSerializer:
 		self.containment_threshold = containment_threshold or self.DEFAULT_CONTAINMENT_THRESHOLD
 
 	def serialize_accessible_elements(self) -> tuple[SerializedDOMState, dict[str, float]]:
+		"""Serialize accessible DOM elements into a structured format with timing metrics."""
 		import time
 
 		start_total = time.time()
@@ -119,7 +121,6 @@ class DOMTreeSerializer:
 
 	def _create_simplified_tree(self, node: EnhancedDOMTreeNode) -> SimplifiedNode | None:
 		"""Step 1: Create a simplified tree with enhanced element detection."""
-
 		if node.node_type == NodeType.DOCUMENT_NODE:
 			# for all cldren including shadow roots
 			for child in node.children_and_shadow_roots:
@@ -269,11 +270,9 @@ class DOMTreeSerializer:
 		return node
 
 	def _filter_tree_recursive(self, node: SimplifiedNode, active_bounds: PropagatingBounds | None = None, depth: int = 0):
-		"""
-		Recursively filter tree with bounding box propagation.
+		"""Recursively filter tree with bounding box propagation.
 		Bounds propagate to ALL descendants until overridden.
 		"""
-
 		# Check if this node should be excluded by active bounds
 		if active_bounds and self._should_exclude_child(node, active_bounds):
 			node.excluded_by_parent = True
@@ -306,10 +305,8 @@ class DOMTreeSerializer:
 			self._filter_tree_recursive(child, propagate_bounds, depth + 1)
 
 	def _should_exclude_child(self, node: SimplifiedNode, active_bounds: PropagatingBounds) -> bool:
+		"""Determine if child should be excluded based on propagating bounds.
 		"""
-		Determine if child should be excluded based on propagating bounds.
-		"""
-
 		# Never exclude text nodes - we always want to preserve text content
 		if node.original_node.node_type == NodeType.TEXT_NODE:
 			return False
@@ -363,8 +360,7 @@ class DOMTreeSerializer:
 		return True
 
 	def _is_contained(self, child: DOMRect, parent: DOMRect, threshold: float) -> bool:
-		"""
-		Check if child is contained within parent bounds.
+		"""Check if child is contained within parent bounds.
 
 		Args:
 			threshold: Percentage (0.0-1.0) of child that must be within parent
@@ -391,8 +387,7 @@ class DOMTreeSerializer:
 		return count
 
 	def _is_propagating_element(self, attributes: dict[str, str | None]) -> bool:
-		"""
-		Check if an element should propagate bounds based on attributes.
+		"""Check if an element should propagate bounds based on attributes.
 		If the element satisfies one of the patterns, it propagates bounds to all its children.
 		"""
 		keys_to_check = ['tag', 'role']

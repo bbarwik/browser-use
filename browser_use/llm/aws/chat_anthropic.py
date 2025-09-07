@@ -1,3 +1,4 @@
+"""AWS Bedrock Anthropic chat model implementation."""
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -30,12 +31,21 @@ T = TypeVar('T', bound=BaseModel)
 
 @dataclass
 class ChatAnthropicBedrock(ChatAWSBedrock):
-	"""
-	AWS Bedrock Anthropic Claude chat model.
-
-	This is a convenience class that provides Claude-specific defaults
-	for the AWS Bedrock service. It inherits all functionality from
-	ChatAWSBedrock but sets Anthropic Claude as the default model.
+	"""AWS Bedrock Anthropic Claude chat model integration for browser automation.
+	
+	@public
+	
+	Provides optimized access to Anthropic Claude models through AWS Bedrock
+	with Claude-specific defaults and configurations. Supports Claude 3.5 Sonnet,
+	Claude 3 Opus, Claude 3 Haiku with AWS enterprise features.
+	
+	Example:
+		>>> llm = ChatAnthropicBedrock(
+		...	    model="anthropic.claude-3-5-sonnet-20240620-v1:0",
+		...	    aws_region="us-east-1",
+		...	    max_tokens=8192,
+		... )
+		>>> agent = Agent(task="Advanced reasoning tasks", llm=llm)
 	"""
 
 	# Anthropic Claude specific defaults
@@ -118,8 +128,7 @@ class ChatAnthropicBedrock(ChatAWSBedrock):
 		return client_params
 
 	def get_client(self) -> AsyncAnthropicBedrock:
-		"""
-		Returns an AsyncAnthropicBedrock client.
+		"""Returns an AsyncAnthropicBedrock client.
 
 		Returns:
 			AsyncAnthropicBedrock: An instance of the AsyncAnthropicBedrock client.
@@ -155,6 +164,7 @@ class ChatAnthropicBedrock(ChatAWSBedrock):
 	async def ainvoke(
 		self, messages: list[BaseMessage], output_format: type[T] | None = None
 	) -> ChatInvokeCompletion[T] | ChatInvokeCompletion[str]:
+		"""Asynchronously invoke the Anthropic chat model via AWS Bedrock."""
 		anthropic_messages, system_prompt = AnthropicMessageSerializer.serialize_messages(messages)
 
 		try:

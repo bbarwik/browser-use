@@ -44,7 +44,6 @@ class LocalBrowserWatchdog(BaseWatchdog):
 
 	async def on_BrowserLaunchEvent(self, event: BrowserLaunchEvent) -> BrowserLaunchResult:
 		"""Launch a local browser process."""
-
 		try:
 			self.logger.debug('[LocalBrowserWatchdog] Received BrowserLaunchEvent, launching local browser...')
 
@@ -308,7 +307,6 @@ class LocalBrowserWatchdog(BaseWatchdog):
 
 	async def _install_browser_with_playwright(self) -> str:
 		"""Get browser executable path from playwright in a subprocess to avoid thread issues."""
-
 		# Run in subprocess with timeout
 		process = await asyncio.create_subprocess_exec(
 			'uvx',

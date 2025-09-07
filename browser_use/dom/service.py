@@ -1,3 +1,4 @@
+"""DOM service for analyzing and manipulating web page structure."""
 import asyncio
 import logging
 import time
@@ -29,12 +30,42 @@ if TYPE_CHECKING:
 
 
 class DomService:
-	"""
-	Service for getting the DOM tree and other DOM-related information.
-
-	Either browser or page must be provided.
-
-	TODO: currently we start a new websocket connection PER STEP, we should definitely keep this persistent
+	"""Service for getting the DOM tree and other DOM-related information.
+	
+	@public
+	
+	The DomService is responsible for DOM serialization, element querying, and
+	maintaining interactive element indices. It provides the core functionality
+	for converting web page content into a format the agent can understand and
+	interact with.
+	
+	Key Responsibilities:
+		- DOM tree serialization with element indexing
+		- Clickable element detection and hashing
+		- Cross-origin iframe handling
+		- Element querying and selection
+		- Accessibility tree integration
+		
+	Key Methods:
+		get_dom_state(): Serialize entire DOM with interactive elements
+		click_element(): Click element by index
+		input_text(): Type text into element by index
+		get_element_by_index(): Retrieve element by its index
+		select_option(): Select dropdown option by index
+		
+	Performance Considerations:
+		- DOM serialization is cached per page state
+		- Element indices are deterministic but change on DOM mutations
+		- Cross-origin iframes require additional CDP connections
+		
+	Args:
+		browser_session: The browser session to operate on
+		logger: Optional logger instance
+		cross_origin_iframes: Whether to traverse cross-origin iframes (slower)
+	
+	Note:
+		Currently creates a new websocket connection per step. Future optimization
+		will maintain persistent connections for better performance.
 	"""
 
 	logger: logging.Logger
@@ -156,7 +187,6 @@ class DomService:
 		cls, node: EnhancedDOMTreeNode, html_frames: list[EnhancedDOMTreeNode]
 	) -> bool:
 		"""Check if the element is visible according to all its parent HTML frames."""
-
 		if not node.snapshot_node:
 			return False
 
@@ -240,7 +270,6 @@ class DomService:
 
 	async def _get_ax_tree_for_all_frames(self, target_id: TargetID) -> GetFullAXTreeReturns:
 		"""Recursively collect all frames and merge their accessibility trees into a single array."""
-
 		cdp_session = await self.browser_session.get_or_create_cdp_session(target_id=target_id, focus=False)
 		frame_tree = await cdp_session.cdp_client.send.Page.getFrameTree(session_id=cdp_session.session_id)
 
@@ -439,7 +468,6 @@ class DomService:
 			initial_html_frames: List of HTML frame nodes encountered so far
 			initial_total_frame_offset: Accumulated coordinate offset
 		"""
-
 		trees = await self._get_all_trees(target_id)
 
 		dom_tree = trees.dom_tree
@@ -460,15 +488,13 @@ class DomService:
 		async def _construct_enhanced_node(
 			node: Node, html_frames: list[EnhancedDOMTreeNode] | None, total_frame_offset: DOMRect | None
 		) -> EnhancedDOMTreeNode:
-			"""
-			Recursively construct enhanced DOM tree nodes.
+			"""Recursively construct enhanced DOM tree nodes.
 
 			Args:
 				node: The DOM node to construct
 				html_frames: List of HTML frame nodes encountered so far
 				accumulated_iframe_offset: Accumulated coordinate translation from parent iframes (includes scroll corrections)
 			"""
-
 			# Initialize lists if not provided
 			if html_frames is None:
 				html_frames = []
@@ -659,7 +685,6 @@ class DomService:
 		Returns:
 			Tuple of (serialized_dom_state, enhanced_dom_tree_root, timing_info)
 		"""
-
 		# Use current target (None means use current)
 		assert self.browser_session.current_target_id is not None
 		enhanced_dom_tree = await self.get_dom_tree(target_id=self.browser_session.current_target_id)

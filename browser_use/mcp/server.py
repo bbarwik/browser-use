@@ -176,7 +176,71 @@ def get_parent_process_cmdline() -> str | None:
 
 
 class BrowserUseServer:
-	"""MCP Server for browser-use capabilities."""
+	"""MCP Server for browser-use capabilities.
+	
+	@public
+	
+	Provides browser automation capabilities as an MCP (Model Context Protocol) server.
+	This allows external MCP clients (like Claude Desktop) to use browser-use for
+	web automation tasks.
+	
+	Module Overview:
+		This server exposes browser-use functionality through MCP tools, allowing
+		clients to:
+		- Control browser navigation and interactions
+		- Extract content from web pages
+		- Run autonomous AI agents for complex tasks
+		- Access file system operations
+	
+	Exposed MCP Tool Names and Signatures:
+		browser_navigate(url, new_tab?): Navigate to URL
+		browser_go_back(): Navigate back in history
+		browser_go_forward(): Navigate forward in history
+		browser_reload(): Reload current page
+		browser_click(index, new_tab?): Click element by index
+		browser_type(text, index?): Type text in input field
+		browser_press(key): Press keyboard key
+		browser_scroll(direction?, amount?): Scroll page
+		browser_screenshot(): Take screenshot (base64 PNG)
+		browser_get_state(): Get current page state and DOM
+		browser_extract_content(): Extract text content
+		browser_extract_markdown(): Extract as markdown
+		browser_select_option(index, value?): Select dropdown option
+		browser_close_tab(): Close current tab
+		browser_new_tab(): Open new tab
+		browser_switch_tab(index): Switch to tab by index
+		browser_get_tabs(): List all open tabs
+		browser_run_task(task, url?): Run autonomous agent task
+		browser_start(): Start browser session
+		browser_stop(): Stop browser session
+		browser_cleanup(): Clean up all resources
+		
+	Environment Variables:
+		BROWSER_USE_HEADLESS: Run browser in headless mode (default: true for MCP)
+		BROWSER_USE_KEEP_ALIVE: Keep browser alive between requests (default: true)
+		BROWSER_USE_DOWNLOADS_PATH: Path for downloaded files
+		OPENAI_API_KEY or ANTHROPIC_API_KEY: For agent tasks
+		
+	Security Notes:
+		- Browser runs with full system access
+		- Only expose to trusted MCP clients
+		- Consider using sandboxed environment
+		- Set allowed_domains in browser profile for restrictions
+		
+	Example Configuration (Claude Desktop):
+		{
+		  "mcpServers": {
+		    "browser-use": {
+		      "command": "uvx",
+		      "args": ["browser-use", "--mcp"],
+		      "env": {
+		        "OPENAI_API_KEY": "sk-...",
+		        "BROWSER_USE_HEADLESS": "true"
+		      }
+		    }
+		  }
+		}
+	"""
 
 	def __init__(self):
 		# Ensure all logging goes to stderr (in case new loggers were created)
@@ -394,7 +458,6 @@ class BrowserUseServer:
 
 	async def _execute_tool(self, tool_name: str, arguments: dict[str, Any]) -> str:
 		"""Execute a browser-use tool."""
-
 		# Agent-based tools
 		if tool_name == 'retry_with_browser_use_agent':
 			return await self._retry_with_browser_use_agent(
@@ -838,10 +901,12 @@ class BrowserUseServer:
 		)
 
 		async def handle_streamable_http(scope: Scope, receive: Receive, send: Send) -> None:
+			"""Handle HTTP requests through the session manager."""
 			await session_manager.handle_request(scope, receive, send)
 
 		@contextlib.asynccontextmanager
 		async def lifespan(app: Starlette):
+			"""Manage the lifespan of the Starlette app with session manager."""
 			async with session_manager.run():
 				logger.info('BrowserUseServer started in Streamable HTTP mode')
 				yield
@@ -862,6 +927,24 @@ class BrowserUseServer:
 
 
 async def main(http: bool = False, port: int = 3000, json_response: bool = False):
+	"""Main entry point for the MCP server.
+	
+	@public
+	
+	Starts the browser-use MCP server in either stdio or HTTP mode.
+	
+	Args:
+		http: If True, run in HTTP mode instead of stdio (default: False)
+		port: Port for HTTP server (default: 3000, only used if http=True)
+		json_response: Use JSON responses instead of SSE in HTTP mode (default: False)
+		
+	Example:
+		>>> # Run as stdio server (for MCP clients)
+		>>> await main()
+		>>> 
+		>>> # Run as HTTP server for testing
+		>>> await main(http=True, port=8080)
+	"""
 	if not MCP_AVAILABLE:
 		print('MCP SDK is required. Install with: pip install mcp', file=sys.stderr)
 		sys.exit(1)

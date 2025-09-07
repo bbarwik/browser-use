@@ -1,3 +1,4 @@
+"""Browser-use utility functions and helpers."""
 import asyncio
 import logging
 import os
@@ -41,8 +42,7 @@ P = ParamSpec('P')
 
 
 class SignalHandler:
-	"""
-	A modular and reusable signal handling system for managing SIGINT (Ctrl+C), SIGTERM,
+	"""A modular and reusable signal handling system for managing SIGINT (Ctrl+C), SIGTERM,
 	and other signals in asyncio applications.
 
 	This class provides:
@@ -62,8 +62,7 @@ class SignalHandler:
 		exit_on_second_int: bool = True,
 		interruptible_task_patterns: list[str] | None = None,
 	):
-		"""
-		Initialize the signal handler.
+		"""Initialize the signal handler.
 
 		Args:
 			loop: The asyncio event loop to use. Defaults to current event loop.
@@ -140,8 +139,7 @@ class SignalHandler:
 			logger.warning(f'Error while unregistering signal handlers: {e}')
 
 	def _handle_second_ctrl_c(self) -> None:
-		"""
-		Handle a second Ctrl+C press by performing cleanup and exiting.
+		"""Handle a second Ctrl+C press by performing cleanup and exiting.
 		This is shared logic used by both sigint_handler and wait_for_resume.
 		"""
 		global _exiting
@@ -189,8 +187,7 @@ class SignalHandler:
 		os._exit(0)
 
 	def sigint_handler(self) -> None:
-		"""
-		SIGINT (Ctrl+C) handler.
+		"""SIGINT (Ctrl+C) handler.
 
 		First Ctrl+C: Cancel current step and pause.
 		Second Ctrl+C: Exit immediately if exit_on_second_int is True.
@@ -227,8 +224,7 @@ class SignalHandler:
 		print('----------------------------------------------------------------------', file=stderr)
 
 	def sigterm_handler(self) -> None:
-		"""
-		SIGTERM handler.
+		"""SIGTERM handler.
 
 		Always exits the program completely.
 		"""
@@ -264,8 +260,7 @@ class SignalHandler:
 				current_task.cancel()
 
 	def wait_for_resume(self) -> None:
-		"""
-		Wait for user input to resume or exit.
+		"""Wait for user input to resume or exit.
 
 		This method should be called after handling the first Ctrl+C.
 		It temporarily restores default signal handling to allow catching
@@ -323,6 +318,16 @@ class SignalHandler:
 
 
 def time_execution_sync(additional_text: str = '') -> Callable[[Callable[P, R]], Callable[P, R]]:
+	"""Decorator to time synchronous function execution.
+	
+	Logs execution time for functions that take longer than 0.25 seconds.
+	
+	Args:
+		additional_text: Optional text to include in the log message.
+		
+	Returns:
+		Decorator function.
+	"""
 	def decorator(func: Callable[P, R]) -> Callable[P, R]:
 		@wraps(func)
 		def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
@@ -351,9 +356,20 @@ def time_execution_sync(additional_text: str = '') -> Callable[[Callable[P, R]],
 def time_execution_async(
 	additional_text: str = '',
 ) -> Callable[[Callable[P, Coroutine[Any, Any, R]]], Callable[P, Coroutine[Any, Any, R]]]:
+	"""Decorator to time asynchronous function execution.
+	
+	Logs execution time for functions that take longer than 0.25 seconds.
+	
+	Args:
+		additional_text: Optional text to include in the log message.
+		
+	Returns:
+		Decorator function for async functions.
+	"""
 	def decorator(func: Callable[P, Coroutine[Any, Any, R]]) -> Callable[P, Coroutine[Any, Any, R]]:
 		@wraps(func)
 		async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+			"""Wrapper function that measures execution time of async functions."""
 			start_time = time.time()
 			result = await func(*args, **kwargs)
 			execution_time = time.time() - start_time
@@ -378,6 +394,14 @@ def time_execution_async(
 
 
 def singleton(cls):
+	"""Decorator to create a singleton class instance.
+	
+	Args:
+		cls: The class to make a singleton.
+		
+	Returns:
+		Wrapper function that ensures only one instance exists.
+	"""
 	instance = [None]
 
 	def wrapper(*args, **kwargs):
@@ -389,13 +413,20 @@ def singleton(cls):
 
 
 def check_env_variables(keys: list[str], any_or_all=all) -> bool:
-	"""Check if all required environment variables are set"""
+	"""Check if required environment variables are set.
+	
+	Args:
+		keys: List of environment variable names to check.
+		any_or_all: Function to use for checking (all or any). Defaults to all.
+		
+	Returns:
+		True if the condition (all/any) is met for the environment variables.
+	"""
 	return any_or_all(os.getenv(key, '').strip() for key in keys)
 
 
 def is_unsafe_pattern(pattern: str) -> bool:
-	"""
-	Check if a domain pattern has complex wildcards that could match too many domains.
+	"""Check if a domain pattern has complex wildcards that could match too many domains.
 
 	Args:
 		pattern: The domain pattern to check
@@ -415,8 +446,7 @@ def is_unsafe_pattern(pattern: str) -> bool:
 
 
 def is_new_tab_page(url: str) -> bool:
-	"""
-	Check if a URL is a new tab page (about:blank, chrome://new-tab-page, or chrome://newtab).
+	"""Check if a URL is a new tab page (about:blank, chrome://new-tab-page, or chrome://newtab).
 
 	Args:
 		url: The URL to check
@@ -428,8 +458,7 @@ def is_new_tab_page(url: str) -> bool:
 
 
 def match_url_with_domain_pattern(url: str, domain_pattern: str, log_warnings: bool = False) -> bool:
-	"""
-	Check if a URL matches a domain pattern. SECURITY CRITICAL.
+	"""Check if a URL matches a domain pattern. SECURITY CRITICAL.
 
 	Supports optional glob patterns and schemes:
 	- *.example.com will match sub.example.com and example.com
@@ -530,6 +559,19 @@ def match_url_with_domain_pattern(url: str, domain_pattern: str, log_warnings: b
 
 
 def merge_dicts(a: dict, b: dict, path: tuple[str, ...] = ()):
+	"""Recursively merge two dictionaries.
+	
+	Args:
+		a: The base dictionary to merge into.
+		b: The dictionary to merge from.
+		path: Current path in the dictionary for error reporting.
+		
+	Returns:
+		The merged dictionary.
+		
+	Raises:
+		Exception: If there are conflicting values at the same key.
+	"""
 	for key in b:
 		if key in a:
 			if isinstance(a[key], dict) and isinstance(b[key], dict):
@@ -619,7 +661,6 @@ def get_git_info() -> dict[str, str] | None:
 
 def _log_pretty_path(path: str | Path | None) -> str:
 	"""Pretty-print a path, shorten home dir to ~ and cwd to ."""
-
 	if not path or not str(path).strip():
 		return ''  # always falsy in -> falsy out so it can be used in ternaries
 
@@ -640,7 +681,17 @@ def _log_pretty_path(path: str | Path | None) -> str:
 
 
 def _log_pretty_url(s: str, max_len: int | None = 22) -> str:
-	"""Truncate/pretty-print a URL with a maximum length, removing the protocol and www. prefix"""
+	"""Truncate/pretty-print a URL with a maximum length.
+	
+	Removes the protocol (http/https) and www. prefix for cleaner display.
+	
+	Args:
+		s: The URL string to pretty-print.
+		max_len: Maximum length for the output string. If None, no truncation.
+		
+	Returns:
+		The pretty-printed URL string.
+	"""
 	s = s.replace('https://', '').replace('http://', '').replace('www.', '')
 	if max_len is not None and len(s) > max_len:
 		return s[:max_len] + '…'

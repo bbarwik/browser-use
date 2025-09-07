@@ -1,3 +1,4 @@
+"""Groq message serialization utilities."""
 from typing import overload
 
 from groq.types.chat import (
@@ -112,7 +113,6 @@ class GroqMessageSerializer:
 	@staticmethod
 	def serialize(message: BaseMessage) -> ChatCompletionMessageParam:
 		"""Serialize a custom message to an OpenAI message param."""
-
 		if isinstance(message, UserMessage):
 			user_result: ChatCompletionUserMessageParam = {
 				'role': 'user',
@@ -156,4 +156,5 @@ class GroqMessageSerializer:
 
 	@staticmethod
 	def serialize_messages(messages: list[BaseMessage]) -> list[ChatCompletionMessageParam]:
+		"""Serialize a list of BaseMessages to Groq's message format."""
 		return [GroqMessageSerializer.serialize(m) for m in messages]

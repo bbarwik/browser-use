@@ -1,3 +1,4 @@
+"""Telemetry service for usage analytics and monitoring."""
 import logging
 import os
 
@@ -22,10 +23,40 @@ POSTHOG_EVENT_SETTINGS = {
 
 @singleton
 class ProductTelemetry:
-	"""
-	Service for capturing anonymized telemetry data.
-
-	If the environment variable `ANONYMIZED_TELEMETRY=False`, anonymized telemetry will be disabled.
+	"""Service for capturing anonymized telemetry data.
+	
+	@public
+	
+	Collects anonymous usage statistics to help improve browser-use. No personal
+	data, credentials, or page content is ever collected - only feature usage
+	patterns and performance metrics.
+	
+	Data Collected:
+		- Feature usage (which tools/actions are used)
+		- Performance metrics (execution times, step counts)
+		- Error types (not content)
+		- System info (OS, Python version)
+		- Anonymous device ID (random UUID)
+	
+	NOT Collected:
+		- URLs visited
+		- Page content or screenshots
+		- Credentials or sensitive data
+		- Task descriptions
+		- LLM prompts or responses
+	
+	Storage:
+		Device ID stored in: ~/.browser-use/device_id
+		Data sent to: PostHog (EU servers)
+		Retention: 90 days
+	
+	Disable Telemetry:
+		Set environment variable: ANONYMIZED_TELEMETRY=false
+		Or in code: os.environ['ANONYMIZED_TELEMETRY'] = 'false'
+	
+	Note:
+		Telemetry helps us understand usage patterns and improve the library.
+		It's completely anonymous and can be disabled at any time.
 	"""
 
 	USER_ID_PATH = str(CONFIG.BROWSER_USE_CONFIG_DIR / 'device_id')
@@ -59,14 +90,14 @@ class ProductTelemetry:
 			logger.debug('Telemetry disabled')
 
 	def capture(self, event: BaseTelemetryEvent) -> None:
+		"""Capture a telemetry event if client is available."""
 		if self._posthog_client is None:
 			return
 
 		self._direct_capture(event)
 
 	def _direct_capture(self, event: BaseTelemetryEvent) -> None:
-		"""
-		Should not be thread blocking because posthog magically handles it
+		"""Should not be thread blocking because posthog magically handles it
 		"""
 		if self._posthog_client is None:
 			return
@@ -81,6 +112,7 @@ class ProductTelemetry:
 			logger.error(f'Failed to send telemetry event {event.name}: {e}')
 
 	def flush(self) -> None:
+		"""Flush any pending telemetry events."""
 		if self._posthog_client:
 			try:
 				self._posthog_client.flush()

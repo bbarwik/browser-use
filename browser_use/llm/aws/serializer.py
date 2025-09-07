@@ -1,3 +1,4 @@
+"""AWS Bedrock message serialization utilities."""
 import base64
 import json
 import re
@@ -198,7 +199,6 @@ class AWSBedrockMessageSerializer:
 	@staticmethod
 	def serialize(message: BaseMessage) -> dict[str, Any] | SystemMessage:
 		"""Serialize a custom message to AWS Bedrock format."""
-
 		if isinstance(message, UserMessage):
 			return {
 				'role': 'user',
@@ -235,8 +235,7 @@ class AWSBedrockMessageSerializer:
 
 	@staticmethod
 	def serialize_messages(messages: list[BaseMessage]) -> tuple[list[dict[str, Any]], list[dict[str, Any]] | None]:
-		"""
-		Serialize a list of messages, extracting any system message.
+		"""Serialize a list of messages, extracting any system message.
 
 		Returns:
 			Tuple of (bedrock_messages, system_message) where system_message is extracted

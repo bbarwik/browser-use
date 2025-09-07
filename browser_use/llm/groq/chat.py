@@ -1,3 +1,4 @@
+"""Groq chat model implementation."""
 import logging
 from dataclasses import dataclass
 from typing import Literal, TypeVar, overload
@@ -54,8 +55,49 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ChatGroq(BaseChatModel):
-	"""
-	A wrapper around AsyncGroq that implements the BaseLLM protocol.
+	"""Groq chat model integration for browser automation.
+	
+	@public
+	
+	Provides ultra-fast inference with Groq's accelerated LLM infrastructure.
+	Supports Llama 4, Qwen 3, Kimi K2, and GPT models with high-speed processing
+	for browser automation tasks.
+	
+	Constructor Parameters:
+		model: Model name from Groq's catalog
+			- "meta-llama/llama-4-maverick-17b-128e-instruct" (recommended)
+			- "meta-llama/llama-4-scout-17b-16e-instruct"
+			- "qwen/qwen3-32b"
+			- "moonshotai/kimi-k2-instruct" (supports tool calling)
+			- "openai/gpt-oss-20b"
+			- "openai/gpt-oss-120b"
+		api_key: Groq API key (defaults to GROQ_API_KEY env var)
+		temperature: Sampling temperature 0-2 (default: None)
+		top_p: Nucleus sampling threshold
+		seed: Random seed for deterministic outputs
+		service_tier: Performance tier ("auto", "on_demand", "flex")
+		base_url: Custom API endpoint (for proxies/gateways)
+		timeout: Request timeout in seconds
+		max_retries: Retry attempts on failure (default: 10)
+	
+	Feature Support:
+		- Structured Output: Llama 4 and GPT models via JSON schema
+		- Tool Calling: Kimi K2 model only
+		- Vision: Not supported (use_vision must be False)
+		- Speed: 10-100x faster than traditional providers
+		- Context: Varies by model (8k-128k tokens)
+	
+	Vision Guidance:
+		Groq models currently do not support vision/image inputs.
+		For multimodal tasks, use ChatOpenAI, ChatAnthropic, or ChatGoogle instead.
+	
+	Example:
+		>>> llm = ChatGroq(
+		...     model="meta-llama/llama-4-maverick-17b-128e-instruct",
+		...     api_key="gsk_...",
+		...     temperature=0.1,
+		... )
+		>>> agent = Agent(task="Fast web interactions", llm=llm, use_vision=False)
 	"""
 
 	# Model configuration
@@ -74,6 +116,7 @@ class ChatGroq(BaseChatModel):
 	max_retries: int = 10  # Increase default retries for automation reliability
 
 	def get_client(self) -> AsyncGroq:
+		"""Get the async Groq client instance."""
 		return AsyncGroq(api_key=self.api_key, base_url=self.base_url, timeout=self.timeout, max_retries=self.max_retries)
 
 	@property
@@ -108,6 +151,7 @@ class ChatGroq(BaseChatModel):
 	async def ainvoke(
 		self, messages: list[BaseMessage], output_format: type[T] | None = None
 	) -> ChatInvokeCompletion[T] | ChatInvokeCompletion[str]:
+		"""Asynchronously invoke the Groq chat model."""
 		groq_messages = GroqMessageSerializer.serialize_messages(messages)
 
 		try:

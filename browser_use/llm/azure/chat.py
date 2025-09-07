@@ -1,3 +1,4 @@
+"""Azure OpenAI chat model implementation."""
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -11,12 +12,22 @@ from browser_use.llm.openai.like import ChatOpenAILike
 
 @dataclass
 class ChatAzureOpenAI(ChatOpenAILike):
-	"""
-	A class for to interact with any provider using the OpenAI API schema.
-
-	Args:
-	    model (str): The name of the OpenAI model to use. Defaults to "not-provided".
-	    api_key (Optional[str]): The API key to use. Defaults to "not-provided".
+	"""Azure OpenAI chat model integration for browser automation.
+	
+	@public
+	
+	Provides access to OpenAI models through Microsoft Azure's infrastructure
+	with enhanced security, compliance, and regional availability. Supports
+	GPT-4, GPT-4 Turbo, and GPT-3.5 models via Azure OpenAI Service.
+	
+	Example:
+		>>> llm = ChatAzureOpenAI(
+		...	    model="gpt-4",
+		...	    api_key="...",
+		...	    azure_endpoint="https://your-resource.openai.azure.com",
+		...	    azure_deployment="gpt-4-deployment",
+		... )
+		>>> agent = Agent(task="Enterprise web automation", llm=llm)
 	"""
 
 	# Model configuration
@@ -67,8 +78,7 @@ class ChatAzureOpenAI(ChatOpenAILike):
 		return _client_params
 
 	def get_client(self) -> AsyncAzureOpenAIClient:
-		"""
-		Returns an asynchronous OpenAI client.
+		"""Returns an asynchronous OpenAI client.
 
 		Returns:
 			AsyncAzureOpenAIClient: An instance of the asynchronous OpenAI client.

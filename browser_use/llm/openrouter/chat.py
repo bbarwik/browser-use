@@ -1,3 +1,4 @@
+"""OpenRouter chat model implementation."""
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, TypeVar, overload
@@ -23,11 +24,94 @@ T = TypeVar('T', bound=BaseModel)
 
 @dataclass
 class ChatOpenRouter(BaseChatModel):
-	"""
-	A wrapper around OpenRouter's chat API, which provides access to various LLM models
-	through a unified OpenAI-compatible interface.
-
-	This class implements the BaseChatModel protocol for OpenRouter's API.
+	"""OpenRouter chat model integration for browser automation.
+	
+	@public
+	
+	Provides access to 100+ language models through a unified API gateway,
+	including GPT-4, Claude, Gemini, Llama, and many specialized models.
+	OpenRouter automatically routes requests to available providers and
+	handles failover for maximum reliability.
+	
+	Constructor Parameters:
+		model: Model identifier from OpenRouter's catalog
+			Popular models:
+			- "openai/gpt-4-turbo": GPT-4 Turbo
+			- "anthropic/claude-3.5-sonnet": Claude 3.5 Sonnet
+			- "google/gemini-pro": Gemini Pro
+			- "meta-llama/llama-3-70b": Llama 3 70B
+			- "mistralai/mistral-large": Mistral Large
+			See https://openrouter.ai/models for full list
+			
+		api_key: OpenRouter API key (defaults to OPENROUTER_API_KEY env var)
+			Get your key at https://openrouter.ai/keys
+			
+		temperature: Sampling temperature 0-2 (model-dependent)
+		
+		top_p: Nucleus sampling threshold
+		
+		seed: Random seed for deterministic outputs
+		
+		http_referer: Your app URL for OpenRouter analytics (optional)
+			Example: "https://myapp.com"
+			
+		base_url: API endpoint (default: "https://openrouter.ai/api/v1")
+		
+		timeout: Request timeout in seconds
+		
+		max_retries: Retry attempts on failure (default: 10)
+	
+	Model Selection:
+		OpenRouter supports model routing with fallbacks:
+		- Use specific model: "anthropic/claude-3.5-sonnet"
+		- Use category: "anthropic/claude-3.5-sonnet|openai/gpt-4" (fallback)
+		- Check pricing at https://openrouter.ai/models
+	
+	Feature Support:
+		Feature support varies by model. Common capabilities:
+		- Tool Calling: GPT-4, Claude, some open models
+		- Structured Output: GPT-4, Claude via JSON mode
+		- Vision: GPT-4V, Claude 3, Gemini Pro Vision
+		- Context: Varies widely (4k-200k tokens)
+		
+	Pricing:
+		OpenRouter uses credit-based pricing. Each model has different
+		costs per token. Set up billing at https://openrouter.ai/credits
+		
+	Benefits:
+		- Single API for multiple providers
+		- Automatic failover and load balancing
+		- No need for multiple API keys
+		- Unified billing across providers
+		- Access to rare and specialized models
+	
+	Example:
+		>>> # Using GPT-4 through OpenRouter
+		>>> llm = ChatOpenRouter(
+		...     model="openai/gpt-4-turbo",
+		...     api_key="sk-or-...",  # or set OPENROUTER_API_KEY
+		...     temperature=0.7,
+		...     http_referer="https://myapp.com",
+		... )
+		>>> agent = Agent(task="Complex analysis", llm=llm)
+		
+		>>> # Using Claude with fallback to GPT-4
+		>>> llm = ChatOpenRouter(
+		...     model="anthropic/claude-3.5-sonnet|openai/gpt-4-turbo",
+		...     api_key="sk-or-...",
+		... )
+		
+		>>> # Using open-source model
+		>>> llm = ChatOpenRouter(
+		...     model="meta-llama/llama-3-70b",
+		...     temperature=0.5,
+		... )
+	
+	Rate Limits:
+		OpenRouter enforces rate limits based on your account tier.
+		The library automatically handles rate limit errors with
+		exponential backoff. Upgrade at https://openrouter.ai/credits
+		for higher limits.
 	"""
 
 	# Model configuration
@@ -79,8 +163,7 @@ class ChatOpenRouter(BaseChatModel):
 		return client_params
 
 	def get_client(self) -> AsyncOpenAI:
-		"""
-		Returns an AsyncOpenAI client configured for OpenRouter.
+		"""Returns an AsyncOpenAI client configured for OpenRouter.
 
 		Returns:
 		    AsyncOpenAI: An instance of the AsyncOpenAI client with OpenRouter base URL.
@@ -121,8 +204,7 @@ class ChatOpenRouter(BaseChatModel):
 	async def ainvoke(
 		self, messages: list[BaseMessage], output_format: type[T] | None = None
 	) -> ChatInvokeCompletion[T] | ChatInvokeCompletion[str]:
-		"""
-		Invoke the model with the given messages through OpenRouter.
+		"""Invoke the model with the given messages through OpenRouter.
 
 		Args:
 		    messages: List of chat messages

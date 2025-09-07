@@ -1,3 +1,4 @@
+"""Browser automation tools and controller service."""
 import asyncio
 import enum
 import json
@@ -66,11 +67,29 @@ T = TypeVar('T', bound=BaseModel)
 
 
 def extract_llm_error_message(error: Exception) -> str:
-	"""
-	Extract the clean error message from an exception that may contain <llm_error_msg> tags.
-
+	"""Extract the clean error message from an exception that may contain <llm_error_msg> tags.
+	
+	@public
+	
 	If the tags are found, returns the content between them.
 	Otherwise, returns the original error string.
+	
+	This utility function is useful when handling errors from browser actions,
+	as the framework wraps error messages in <llm_error_msg> tags to provide
+	clean, LLM-friendly error messages.
+	
+	Args:
+		error: The exception to extract the message from.
+		
+	Returns:
+		The extracted clean error message, or the original error string if no tags found.
+		
+	Example:
+		>>> try:
+		...     result = await tools.act(action, browser_session)
+		... except Exception as e:
+		...     clean_msg = extract_llm_error_message(e)
+		...     return ActionResult(error=f"Action failed: {clean_msg}")
 	"""
 	import re
 
@@ -88,12 +107,156 @@ def extract_llm_error_message(error: Exception) -> str:
 
 
 class Tools(Generic[Context]):
+	"""Tool management service for handling browser actions and structured output.
+	
+	@public
+	
+	The Tools class manages the registry of available actions that agents can perform.
+	It provides default browser actions (navigation, clicking, typing, etc.) and 
+	allows registration of custom actions.
+	
+	Default Built-in Tools:
+		Navigation:
+			search_google(query: str): Search query in Google
+				- Opens in existing Google tab or agent's about:blank tab if available
+				- Otherwise opens in new tab
+			go_to_url(url: str, new_tab: bool=False): Navigate to URL
+				- new_tab=True: Opens in new tab
+				- new_tab=False: Navigates current tab
+				- Handles network errors gracefully
+			go_back(): Navigate back in browser history
+			wait(seconds: float=3): Wait for page load
+				- Default: 3 seconds, Max: 10 seconds
+				- Use for dynamic content loading
+		
+		Interaction:
+			click_element_by_index(index: int, while_holding_ctrl: bool=False): Click element by index
+				- while_holding_ctrl=True: Opens link in new tab (Ctrl+Click)
+				- Validates index exists in current DOM
+				- Scrolls element into view before clicking
+			input_text(index: int, text: str): Type text into input field
+				- Clears existing content first
+				- Only works on input/textarea elements
+			upload_file_to_element(index: int, filename: str): Upload file to file input
+				- File must exist in available_file_paths
+				- Validates element is file input type
+			select_dropdown_option(index: int, option_text: str): Select dropdown option
+				- Works with <select>, ARIA menus, custom dropdowns
+				- Matches by exact text
+			get_dropdown_options(index: int): Get list of dropdown options
+				- Returns all available option values
+			switch_tab(tab_id: str): Switch to specific tab
+				- Use tab IDs from browser_state.tabs
+			close_tab(tab_id: str): Close specific tab
+			send_keys(keys: str): Send special keys or shortcuts
+				- Examples: "Escape", "Enter", "Control+o", "Control+Shift+T"
+		
+		DOM Index Note:
+			Element indices are generated from the current DOM state and change
+			when the page updates. Indices are deterministic for a given DOM
+			state but become invalid after navigation or DOM mutations. Always
+			use fresh browser_state to get current indices.
+		
+		Index-Hash Behavior:
+			The system uses content hashing to maintain index stability when
+			possible. If an element's content hash matches a previously seen
+			element, it retains the same index even after DOM updates.
+		
+		Scrolling:
+			scroll(down: bool=True, num_pages: float=1.0, index: int=None): Scroll page
+				- down=True: Scroll down, down=False: Scroll up
+				- num_pages: How many pages (0.5 for half, 1.0 for full)
+				- index: Optional element index to scroll within
+			scroll_to_text(text: str): Scroll to specific text on page
+				- Finds and scrolls to first occurrence
+		
+		Content:
+			extract_content(query: str): Extract specific information from page
+				- Uses LLM to extract structured data based on query
+				- Returns semantic information from page content
+		
+		File System:
+			write_file(file_name: str, content: str): Write content to file
+				- Supports: .md, .txt, .json, .csv, .pdf
+				- PDF files: Write markdown, auto-converts to PDF
+			read_file(file_name: str): Read file contents
+			replace_in_file(file_name: str, old_str: str, new_str: str): Replace text
+				- old_str must match exactly
+				- Good for updating todo items
+		
+		Control:
+			done(text: str, success: bool=True, files_to_display: list=[]): Complete task
+				- text: Summary of results for user
+				- success: Whether task completed successfully
+				- files_to_display: Files to show user
+	
+	Type Parameters:
+		Context: Type of context data passed to tool actions.
+	
+	Special Injected Parameters:
+		Tool functions can use these special parameter names for automatic injection:
+		- browser_session: BrowserSession - Browser control interface
+		- context: Any - Custom context from Agent(context=...)
+		- page_url: str - Current page URL
+		- cdp_client: CDPClient - Direct CDP access
+		- page_extraction_llm: BaseChatModel - LLM for content extraction
+		- file_system: FileSystem - File operations interface
+		- available_file_paths: list[str] - Files available for upload
+		- has_sensitive_data: bool - Whether sensitive data is present
+	
+	When to Create a Custom Tool:
+		Create a custom tool when you need to:
+		- Integrate with external APIs or services
+		- Implement complex multi-step workflows as atomic operations
+		- Add domain-specific actions not covered by defaults
+		- Enforce business logic or validation rules
+		- Handle special authentication or security requirements
+		
+		Use prompt engineering instead when:
+		- The task can be done with existing tools
+		- You just need different behavior occasionally
+		- The logic is simple and context-dependent
+	
+	Example:
+		>>> tools = Tools()
+		>>> # Register action with injected parameters
+		>>> @tools.registry.action("Extract with AI")
+		... async def extract(
+		...     query: str,  # User parameter
+		...     browser_session: BrowserSession,  # Injected
+		...     page_extraction_llm: BaseChatModel  # Injected
+		... ):
+		...     state = await browser_session.get_browser_state_summary()
+		...     result = await page_extraction_llm.generate(f"Extract {query} from {state.dom_state}")
+		...     return ActionResult(extracted_content=result)
+	"""
 	def __init__(
 		self,
 		exclude_actions: list[str] = [],
 		output_model: type[T] | None = None,
 		display_files_in_done_text: bool = True,
 	):
+		"""Initialize the Tools service with action registry.
+		
+		Args:
+			exclude_actions: List of action names to exclude from registry.
+				Common exclusions: ["screenshot"] to disable screenshots.
+			output_model: Pydantic model for structured output extraction.
+				When provided, replaces the default "done" action.
+			display_files_in_done_text: Whether to show file paths in completion
+				messages (default: True).
+		
+		Example:
+			>>> from pydantic import BaseModel
+			>>> class ProductInfo(BaseModel):
+			...     name: str
+			...     price: float
+			>>> 
+			>>> tools = Tools(
+			...     exclude_actions=["screenshot"],
+			...     output_model=ProductInfo
+			... )
+		"""
 		self.registry = Registry[Context](exclude_actions)
 		self.display_files_in_done_text = display_files_in_done_text
 
@@ -267,6 +430,49 @@ class Tools(Generic[Context]):
 			param_model=ClickElementAction,
 		)
 		async def click_element_by_index(params: ClickElementAction, browser_session: BrowserSession):
+			"""Click an element by its index in the DOM.
+			
+			@public
+			
+			Primary method for clicking elements in browser-use 0.7, replacing
+			Playwright's page.mouse.click() coordinate-based approach. Elements are
+			identified by their index in the DOM state's interactive elements list.
+			
+			This function:
+			1. Retrieves the DOM element by index using get_element_by_index()
+			2. Dispatches a ClickElementEvent through the event bus
+			3. Waits for the click to complete and returns the result
+			
+			Args:
+				params: ClickElementAction with:
+					- index: Element index from DOM state (1-based, never 0)
+					- while_holding_ctrl: If True, holds Ctrl while clicking
+					  (opens links in new background tab)
+				browser_session: Active browser session for DOM access and events
+			
+			Returns:
+				ActionResult with:
+					- extracted_content: Description of what was clicked
+					- metadata: Click coordinates and other details
+					- error: Error message if click failed
+			
+			Raises:
+				AssertionError: If index is 0 (invalid)
+				ValueError: If element index not found in DOM
+			
+			Example:
+				>>> # Click element 5
+				>>> action = ClickElementAction(index=5)
+				>>> result = await click_element_by_index(action, browser_session)
+				>>> 
+				>>> # Ctrl+Click to open link in new tab
+				>>> action = ClickElementAction(index=10, while_holding_ctrl=True)
+				>>> result = await click_element_by_index(action, browser_session)
+			
+			Note:
+				Index 0 is reserved for the page itself and cannot be clicked.
+				Always verify the element exists in browser_state before clicking.
+			"""
 			# Dispatch click event with node
 			try:
 				assert params.index != 0, (
@@ -873,6 +1079,27 @@ Provide the extracted information in a clear, structured format."""
 
 	# Custom done action for structured output
 	def _register_done_action(self, output_model: type[T] | None, display_files_in_done_text: bool = True):
+		"""Register the 'done' action for task completion.
+		
+		Internal method that registers either a structured output done action
+		(when output_model is provided) or a standard text-based done action.
+		
+		This method is called during initialization and by use_structured_output_action().
+		
+		When output_model is provided:
+		- Creates a StructuredOutputAction that validates against the model
+		- Returns extracted_content as JSON of the validated data
+		- Sets is_done=True to signal task completion
+		
+		When output_model is None:
+		- Creates a standard DoneAction for free-form text responses
+		- Supports file attachments via files_to_display parameter
+		- Formats output with optional file contents
+		
+		Args:
+			output_model: Optional Pydantic model for structured output validation
+			display_files_in_done_text: Whether to include file contents in the response
+		"""
 		if output_model is not None:
 			self.display_files_in_done_text = display_files_in_done_text
 
@@ -946,14 +1173,57 @@ Provide the extracted information in a clear, structured format."""
 				)
 
 	def use_structured_output_action(self, output_model: type[T]):
+		"""Register a structured output action with the given model type.
+		
+		@public
+		
+		Replaces the default 'done' action with a structured output action that
+		validates and returns data according to the provided Pydantic model.
+		
+		This method internally calls _register_done_action() to replace the default
+		done action with one that expects structured output matching the model schema.
+		
+		Args:
+			output_model: A Pydantic model class defining the expected output structure.
+				The agent will return an instance of this model when completing tasks.
+		
+		Example:
+			>>> from pydantic import BaseModel
+			>>> class SearchResult(BaseModel):
+			...     title: str
+			...     url: str
+			...     summary: str
+			>>> 
+			>>> tools = Tools()
+			>>> tools.use_structured_output_action(SearchResult)
+			>>> # Now the agent will return SearchResult instances
+		"""
 		self._register_done_action(output_model)
 
 	# Register ---------------------------------------------------------------
 
 	def action(self, description: str, **kwargs):
-		"""Decorator for registering custom actions
+		"""Decorator for registering custom actions.
 
-		@param description: Describe the LLM what the function does (better description == better function calling)
+		@public
+
+		The primary decorator for defining a new custom action that can be used by
+		the agent. Actions are functions that the agent can call to interact with
+		the browser or perform other tasks.
+
+		Args:
+			description: Describe the LLM what the function does (better description == better function calling)
+			**kwargs: Additional parameters for action configuration
+			
+		Returns:
+			Decorator function that registers the action
+			
+		Example:
+			>>> tools = Tools()
+			>>> @tools.action("Click the submit button")
+			... async def click_submit() -> ActionResult:
+			...     # Implementation here
+			...     return ActionResult(...)
 		"""
 		return self.registry.action(description, **kwargs)
 
@@ -970,8 +1240,53 @@ Provide the extracted information in a clear, structured format."""
 		available_file_paths: list[str] | None = None,
 		file_system: FileSystem | None = None,
 	) -> ActionResult:
-		"""Execute an action"""
-
+		"""Execute an action selected by the agent.
+		
+		@public
+		
+		This is the main execution method that processes ActionModel instances from
+		the agent and routes them to the appropriate registered action handler.
+		
+		Internally, this method:
+		1. Extracts the action name and parameters from the ActionModel
+		2. Creates observability spans if Laminar is available
+		3. Calls registry.execute_action() with all necessary injected parameters
+		4. Handles exceptions and formats them for the agent
+		5. Returns an ActionResult with the action's output or error
+		
+		Args:
+			action: ActionModel containing the action name and parameters to execute.
+				Only one action field should be set (non-None) at a time.
+			browser_session: The active browser session for browser control operations.
+			page_extraction_llm: Optional LLM for content extraction tasks. Used by
+				extract_structured_data action to analyze page content.
+			sensitive_data: Optional dictionary of sensitive data for replacement.
+				Keys are placeholder names, values are the actual sensitive data.
+			available_file_paths: Optional list of file paths available for upload.
+				Used by upload_file_to_element to validate file availability.
+			file_system: Optional FileSystem instance for file operations.
+				Used by write_file, read_file, and related actions.
+		
+		Returns:
+			ActionResult: Result of the action execution containing:
+				- extracted_content: Main output from the action
+				- error: Error message if action failed
+				- is_done: Whether the task is complete (for done action)
+				- success: Whether the action succeeded
+				- metadata: Additional data from the action
+		
+		Raises:
+			ValueError: If the action result type is invalid (not str, ActionResult, or None)
+		
+		Example:
+			>>> tools = Tools()
+			>>> action = ActionModel(click_element_by_index=ClickElementAction(index=5))
+			>>> result = await tools.act(
+			...     action=action,
+			...     browser_session=browser_session
+			... )
+			>>> print(result.extracted_content)  # "Clicked element with index 5"
+		"""
 		for action_name, params in action.model_dump(exclude_unset=True).items():
 			if params is not None:
 				# Use Laminar span if available, otherwise use no-op context manager

@@ -1,3 +1,4 @@
+"""LLM response data models and types."""
 from typing import Generic, TypeVar, Union
 
 from pydantic import BaseModel
@@ -6,8 +7,12 @@ T = TypeVar('T', bound=Union[BaseModel, str])
 
 
 class ChatInvokeUsage(BaseModel):
-	"""
-	Usage information for a chat model invocation.
+	"""Usage information for a chat model invocation.
+	
+	@public
+	
+	A data class holding token usage statistics for a single LLM invocation,
+	including prompt tokens, completion tokens, cached tokens, and total usage.
 	"""
 
 	prompt_tokens: int
@@ -30,8 +35,13 @@ class ChatInvokeUsage(BaseModel):
 
 
 class ChatInvokeCompletion(BaseModel, Generic[T]):
-	"""
-	Response from a chat model invocation.
+	"""Response from a chat model invocation.
+	
+	@public
+	
+	A data class that holds the completion response from an LLM invocation,
+	including the actual completion content, usage statistics, and optional
+	thinking/reasoning information.
 	"""
 
 	completion: T

@@ -1,3 +1,4 @@
+"""Google AI chat model implementation."""
 import json
 from dataclasses import dataclass
 from typing import Any, Literal, TypeVar, overload
@@ -42,33 +43,57 @@ def _is_retryable_error(exception):
 
 @dataclass
 class ChatGoogle(BaseChatModel):
-	"""
-	A wrapper around Google's Gemini chat model using the genai client.
-
-	This class accepts all genai.Client parameters while adding model,
-	temperature, and config parameters for the LLM interface.
-
-	Args:
+	"""Google Gemini chat model integration for browser automation.
+	
+	@public
+	
+	Provides access to Google's Gemini models including multimodal capabilities,
+	code execution, and reasoning. Supports Gemini 2.0 Flash, Gemini 2.0 Flash Exp,
+	and other Gemini family models.
+	
+	Constructor Parameters:
 		model: The Gemini model to use
-		temperature: Temperature for response generation
-		config: Additional configuration parameters to pass to generate_content
-			(e.g., tools, safety_settings, etc.).
-		api_key: Google API key
-		vertexai: Whether to use Vertex AI
-		credentials: Google credentials object
-		project: Google Cloud project ID
-		location: Google Cloud location
-		http_options: HTTP options for the client
-
+			- "gemini-2.0-flash-exp": Latest experimental model (recommended)
+			- "gemini-2.0-flash": Stable fast model
+			- "gemini-2.0-flash-lite-preview-02-05": Lightweight preview
+			- "Gemini-2.0-exp": Experimental features
+		api_key: Google API key (defaults to GOOGLE_API_KEY env var)
+			Note: GOOGLE_API_KEY replaces deprecated GEMINI_API_KEY
+		temperature: Sampling temperature 0-2
+		top_p: Nucleus sampling threshold
+		seed: Random seed for deterministic outputs
+		thinking_budget: Token budget for thinking/reasoning
+		config: Additional Gemini configuration dict
+			- tools: Tool definitions
+			- safety_settings: Content filtering
+			- system_instruction: System prompt
+		vertexai: Use Vertex AI instead of Google AI (enterprise)
+		credentials: Google Cloud credentials object
+		project: Google Cloud project ID (for Vertex AI)
+		location: Google Cloud location (for Vertex AI)
+		http_options: HTTP client configuration
+	
+	Feature Support:
+		- Tool Calling: Yes (full function calling)
+		- Structured Output: Yes (via JSON mode)
+		- Vision: Yes (excellent multimodal support)
+		- Context: 1M tokens (Gemini 1.5 Pro)
+		- Code Execution: Yes (sandboxed Python)
+		- Reasoning: Yes (with thinking tokens)
+	
+	API Key Migration:
+		The environment variable GEMINI_API_KEY has been renamed to GOOGLE_API_KEY.
+		Update your .env file accordingly:
+		Old: GEMINI_API_KEY=...
+		New: GOOGLE_API_KEY=...
+	
 	Example:
-		from google.genai import types
-
-		llm = ChatGoogle(
-			model='gemini-2.0-flash-exp',
-			config={
-				'tools': [types.Tool(code_execution=types.ToolCodeExecution())]
-			}
-		)
+		>>> llm = ChatGoogle(
+		...     model="gemini-2.0-flash-exp",
+		...     api_key="...",  # or set GOOGLE_API_KEY env var
+		...     temperature=0.7,
+		... )
+		>>> agent = Agent(task="Analyze webpage content", llm=llm)
 	"""
 
 	# Model configuration
@@ -110,8 +135,7 @@ class ChatGoogle(BaseChatModel):
 		return client_params
 
 	def get_client(self) -> genai.Client:
-		"""
-		Returns a genai.Client instance.
+		"""Returns a genai.Client instance.
 
 		Returns:
 			genai.Client: An instance of the Google genai client.
@@ -156,8 +180,7 @@ class ChatGoogle(BaseChatModel):
 	async def ainvoke(
 		self, messages: list[BaseMessage], output_format: type[T] | None = None
 	) -> ChatInvokeCompletion[T] | ChatInvokeCompletion[str]:
-		"""
-		Invoke the model with the given messages.
+		"""Invoke the model with the given messages.
 
 		Args:
 			messages: List of chat messages
@@ -166,7 +189,6 @@ class ChatGoogle(BaseChatModel):
 		Returns:
 			Either a string response or an instance of output_format
 		"""
-
 		# Serialize messages to Google format
 		contents, system_instruction = GoogleMessageSerializer.serialize_messages(messages)
 
@@ -324,13 +346,11 @@ class ChatGoogle(BaseChatModel):
 			) from e
 
 	def _fix_gemini_schema(self, schema: dict[str, Any]) -> dict[str, Any]:
-		"""
-		Convert a Pydantic model to a Gemini-compatible schema.
+		"""Convert a Pydantic model to a Gemini-compatible schema.
 
 		This function removes unsupported properties like 'additionalProperties' and resolves
 		$ref references that Gemini doesn't support.
 		"""
-
 		# Handle $defs and $ref resolution
 		if '$defs' in schema:
 			defs = schema.pop('$defs')

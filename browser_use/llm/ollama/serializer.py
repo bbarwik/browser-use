@@ -1,3 +1,4 @@
+"""Ollama message serialization utilities."""
 import base64
 import json
 from typing import Any, overload
@@ -94,7 +95,6 @@ class OllamaMessageSerializer:
 	@staticmethod
 	def serialize(message: BaseMessage) -> Message:
 		"""Serialize a custom message to an Ollama Message."""
-
 		if isinstance(message, UserMessage):
 			text_content = OllamaMessageSerializer._extract_text_content(message.content)
 			images = OllamaMessageSerializer._extract_images(message.content)

@@ -1,3 +1,4 @@
+"""Tool registry service for managing browser automation tools."""
 import asyncio
 import functools
 import inspect
@@ -29,7 +30,36 @@ logger = logging.getLogger(__name__)
 
 
 class Registry(Generic[Context]):
-	"""Service for registering and managing actions"""
+	"""Service for registering and managing actions.
+	
+	@public
+	
+	The Registry manages all available browser actions that can be executed
+	by the agent. It provides registration, discovery, and execution of actions,
+	handling parameter injection and validation automatically.
+	
+	This class is typically accessed through Tools.registry rather than directly.
+	
+	Key Responsibilities:
+		- Action registration via decorator pattern
+		- Parameter validation and injection
+		- Dynamic ActionModel generation
+		- Domain-based action filtering
+		- Telemetry tracking for executed actions
+		
+	Type Parameters:
+		Context: Type of custom context data passed to actions
+		
+	Example:
+		>>> from browser_use import Tools
+		>>> tools = Tools()
+		>>> 
+		>>> # Register custom action via tools.registry
+		>>> @tools.registry.action("Extract product price")
+		>>> async def extract_price(browser_session) -> ActionResult:
+		...     # Implementation
+		...     return ActionResult(extracted_content="$99.99")
+	"""
 
 	def __init__(self, exclude_actions: list[str] | None = None):
 		self.registry = ActionRegistry()
@@ -59,8 +89,7 @@ class Registry(Generic[Context]):
 		description: str,
 		param_model: type[BaseModel] | None = None,
 	) -> tuple[Callable, type[BaseModel]]:
-		"""
-		Normalize action function to accept only kwargs.
+		"""Normalize action function to accept only kwargs.
 
 		Returns:
 			- Normalized function that accepts (*_, params: ParamModel, **special_params)
@@ -276,7 +305,29 @@ class Registry(Generic[Context]):
 		domains: list[str] | None = None,
 		allowed_domains: list[str] | None = None,
 	):
-		"""Decorator for registering actions"""
+		"""Decorator for registering actions.
+		
+		@public
+		
+		An alternative way to access the action decorator through the registry.
+		Used to register custom actions directly with the registry object.
+		
+		Args:
+			description: Description of what the action does
+			param_model: Optional Pydantic model for action parameters
+			domains: List of allowed domains for this action
+			allowed_domains: Alias for domains parameter
+			
+		Returns:
+			Decorator function that registers the action
+			
+		Example:
+			>>> from browser_use import Tools
+			>>> tools = Tools()
+			>>> @tools.registry.action("Search for text on page")
+			... async def search_text(text: str) -> ActionResult:
+			...     return ActionResult(...)
+		"""
 		# Handle aliases: domains and allowed_domains are the same parameter
 		if allowed_domains is not None and domains is not None:
 			raise ValueError("Cannot specify both 'domains' and 'allowed_domains' - they are aliases for the same parameter")
@@ -391,8 +442,7 @@ class Registry(Generic[Context]):
 	def _replace_sensitive_data(
 		self, params: BaseModel, sensitive_data: dict[str, Any], current_url: str | None = None
 	) -> BaseModel:
-		"""
-		Replaces sensitive data placeholders in params with actual values.
+		"""Replaces sensitive data placeholders in params with actual values.
 
 		Args:
 			params: The parameter object containing <secret>placeholder</secret> tags

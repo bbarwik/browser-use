@@ -17,13 +17,36 @@ from browser_use.dom.views import EnhancedDOMTreeNode
 
 
 class ElementSelectedEvent(BaseEvent[T_EventResultType]):
-	"""An element was selected."""
+	"""Base event for element-specific operations.
+	
+	@public
+	
+	Base class for all events that operate on a specific DOM element.
+	Provides common functionality for element selection and validation.
+	
+	Attributes:
+		node: The DOM element to operate on, containing all element metadata
+			including element_index, node_id, attributes, position, etc.
+	
+	Example:
+		>>> # Usually not used directly, but as a base class:
+		>>> class MyCustomElementEvent(ElementSelectedEvent):
+		...     custom_param: str
+	"""
 
 	node: EnhancedDOMTreeNode
 
 	@field_validator('node', mode='before')
 	@classmethod
 	def serialize_node(cls, data: EnhancedDOMTreeNode | None) -> EnhancedDOMTreeNode | None:
+		"""Serialize DOM node data for event handling.
+		
+		Args:
+			data: The DOM tree node to serialize.
+			
+		Returns:
+			Serialized DOM tree node without circular references.
+		"""
 		if data is None:
 			return None
 		return EnhancedDOMTreeNode(
@@ -77,7 +100,36 @@ class ElementSelectedEvent(BaseEvent[T_EventResultType]):
 
 
 class NavigateToUrlEvent(BaseEvent[None]):
-	"""Navigate to a specific URL."""
+	"""Navigate to a specific URL.
+	
+	@public
+	
+	Dispatch this event to navigate the browser to a new URL, either in the
+	current tab or a new tab.
+	
+	Attributes:
+		url: The URL to navigate to (must be a valid URL with protocol)
+		wait_until: When to consider navigation complete:
+			- 'load': Wait for the load event (default)
+			- 'domcontentloaded': Wait for DOMContentLoaded
+			- 'networkidle': Wait for network to be idle
+			- 'commit': Wait for navigation to commit
+		timeout_ms: Optional navigation timeout in milliseconds
+		new_tab: If True, opens URL in new tab; if False, uses current tab
+	
+	Example:
+		>>> # Navigate in current tab
+		>>> event = browser_session.event_bus.dispatch(
+		...     NavigateToUrlEvent(url="https://example.com")
+		... )
+		>>> await event
+		>>> 
+		>>> # Open in new tab
+		>>> event = browser_session.event_bus.dispatch(
+		...     NavigateToUrlEvent(url="https://example.com", new_tab=True)
+		... )
+		>>> await event
+	"""
 
 	url: str
 	wait_until: Literal['load', 'domcontentloaded', 'networkidle', 'commit'] = 'load'
@@ -92,7 +144,43 @@ class NavigateToUrlEvent(BaseEvent[None]):
 
 
 class ClickElementEvent(ElementSelectedEvent[dict[str, Any] | None]):
-	"""Click an element."""
+	"""Click an element in the page.
+	
+	@public
+	
+	Dispatch this event to click on a DOM element. This is the primary way to
+	click elements in browser-use 0.7, replacing Playwright's element.click().
+	Supports various click types and modifiers like Ctrl+Click for opening links in new tabs.
+	
+	Attributes:
+		node: The DOM element to click on (EnhancedDOMTreeNode from get_element_by_index)
+		button: Mouse button to use ('left', 'right', or 'middle'). Default: 'left'
+		while_holding_ctrl: If True, holds Ctrl while clicking (opens links in new tab). Default: False
+	
+	Returns:
+		Optional dict with click metadata including coordinates and timing
+	
+	Example:
+		>>> # Common pattern: find element in state, then click it
+		>>> state = await browser_session.get_browser_state_summary()
+		>>> for index, elem in state.dom_state.selector_map.items():
+		...     if elem.tag_name == 'BUTTON' and 'Submit' in elem.get_all_children_text():
+		...         # Get the element and click it
+		...         node = await browser_session.get_element_by_index(index)
+		...         if node:
+		...             event = browser_session.event_bus.dispatch(
+		...                 ClickElementEvent(node=node)
+		...             )
+		...             await event
+		...             break
+		>>> 
+		>>> # Ctrl+Click to open link in new tab
+		>>> link_node = await browser_session.get_element_by_index(10)
+		>>> event = browser_session.event_bus.dispatch(
+		...     ClickElementEvent(node=link_node, while_holding_ctrl=True)
+		... )
+		>>> await event
+	"""
 
 	node: 'EnhancedDOMTreeNode'
 	button: Literal['left', 'right', 'middle'] = 'left'
@@ -107,7 +195,52 @@ class ClickElementEvent(ElementSelectedEvent[dict[str, Any] | None]):
 
 
 class TypeTextEvent(ElementSelectedEvent[dict | None]):
-	"""Type text into an element."""
+	"""Type text into an input element.
+	
+	@public
+	
+	Dispatch this event to type text into an input field, textarea, or
+	any editable element. This is the primary way to type text in browser-use 0.7,
+	replacing Playwright's element.fill() and element.type() methods.
+	Can optionally clear existing content first.
+	
+	Attributes:
+		node: The input element to type into (EnhancedDOMTreeNode from get_element_by_index)
+		text: The text to type
+		clear_existing: If True, clears existing content before typing. Default: False
+	
+	Returns:
+		Optional dict with input metadata
+	
+	Example:
+		>>> # Common pattern: find input field in state, then type into it
+		>>> state = await browser_session.get_browser_state_summary()
+		>>> for index, elem in state.dom_state.selector_map.items():
+		...     if elem.tag_name == 'INPUT' and elem.attributes.get('name') == 'username':
+		...         # Get the element and type into it
+		...         input_node = await browser_session.get_element_by_index(index)
+		...         if input_node:
+		...             event = browser_session.event_bus.dispatch(
+		...                 TypeTextEvent(
+		...                     node=input_node,
+		...                     text="user@example.com",
+		...                     clear_existing=True
+		...                 )
+		...             )
+		...             await event
+		...             break
+		>>> 
+		>>> # Type into a search box
+		>>> search_box = await browser_session.get_element_by_index(10)
+		>>> event = browser_session.event_bus.dispatch(
+		...     TypeTextEvent(
+		...         node=search_box,
+		...         text="browser automation",
+		...         clear_existing=True
+		...     )
+		... )
+		>>> await event
+	"""
 
 	node: 'EnhancedDOMTreeNode'
 	text: str
@@ -117,7 +250,32 @@ class TypeTextEvent(ElementSelectedEvent[dict | None]):
 
 
 class ScrollEvent(ElementSelectedEvent[None]):
-	"""Scroll the page or element."""
+	"""Scroll the page or a specific element.
+	
+	@public
+	
+	Dispatch this event to scroll the page or a scrollable element in any
+	direction by a specified amount of pixels.
+	
+	Attributes:
+		direction: Scroll direction ('up', 'down', 'left', 'right')
+		amount: Number of pixels to scroll
+		node: Optional element to scroll; if None, scrolls the entire page
+	
+	Example:
+		>>> # Scroll page down by 500 pixels
+		>>> event = browser_session.event_bus.dispatch(
+		...     ScrollEvent(direction='down', amount=500)
+		... )
+		>>> await event
+		>>> 
+		>>> # Scroll specific element
+		>>> scrollable_div = await browser_session.get_element_by_index(20)
+		>>> event = browser_session.event_bus.dispatch(
+		...     ScrollEvent(direction='down', amount=200, node=scrollable_div)
+		... )
+		>>> await event
+	"""
 
 	direction: Literal['up', 'down', 'left', 'right']
 	amount: int  # pixels
@@ -127,7 +285,35 @@ class ScrollEvent(ElementSelectedEvent[None]):
 
 
 class SwitchTabEvent(BaseEvent[TargetID]):
-	"""Switch to a different tab."""
+	"""Switch to a different browser tab.
+	
+	@public
+	
+	Dispatch this event to switch focus to a different browser tab.
+	
+	Attributes:
+		target_id: The target ID of the tab to switch to, or None to switch
+			to the most recently opened tab
+	
+	Returns:
+		TargetID of the newly focused tab
+	
+	Example:
+		>>> # Get list of tabs
+		>>> tabs = await browser_session.get_tabs()
+		>>> 
+		>>> # Switch to specific tab
+		>>> event = browser_session.event_bus.dispatch(
+		...     SwitchTabEvent(target_id=tabs[1].target_id)
+		... )
+		>>> await event
+		>>> 
+		>>> # Switch to most recent tab
+		>>> event = browser_session.event_bus.dispatch(
+		...     SwitchTabEvent(target_id=None)
+		... )
+		>>> await event
+	"""
 
 	target_id: TargetID | None = Field(default=None, description='None means switch to the most recently opened tab')
 
@@ -135,7 +321,25 @@ class SwitchTabEvent(BaseEvent[TargetID]):
 
 
 class CloseTabEvent(BaseEvent[None]):
-	"""Close a tab."""
+	"""Close a browser tab.
+	
+	@public
+	
+	Dispatch this event to close a specific browser tab.
+	
+	Attributes:
+		target_id: The target ID of the tab to close
+	
+	Example:
+		>>> # Get list of tabs
+		>>> tabs = await browser_session.get_tabs()
+		>>> 
+		>>> # Close a specific tab
+		>>> event = browser_session.event_bus.dispatch(
+		...     CloseTabEvent(target_id=tabs[2].target_id)
+		... )
+		>>> await event
+	"""
 
 	target_id: TargetID
 
@@ -143,7 +347,34 @@ class CloseTabEvent(BaseEvent[None]):
 
 
 class ScreenshotEvent(BaseEvent[str]):
-	"""Request to take a screenshot."""
+	"""Take a screenshot of the page.
+	
+	@public
+	
+	Dispatch this event to capture a screenshot of the current page.
+	
+	Attributes:
+		full_page: If True, captures entire page; if False, captures viewport only
+		clip: Optional dict with clipping region {x, y, width, height}
+	
+	Returns:
+		Base64-encoded PNG image string
+	
+	Example:
+		>>> # Take viewport screenshot
+		>>> event = browser_session.event_bus.dispatch(
+		...     ScreenshotEvent(full_page=False)
+		... )
+		>>> await event
+		>>> screenshot_base64 = await event.event_result()
+		>>> 
+		>>> # Take full page screenshot
+		>>> event = browser_session.event_bus.dispatch(
+		...     ScreenshotEvent(full_page=True)
+		... )
+		>>> await event
+		>>> screenshot_base64 = await event.event_result()
+	"""
 
 	full_page: bool = False
 	clip: dict[str, float] | None = None  # {x, y, width, height}
@@ -152,7 +383,35 @@ class ScreenshotEvent(BaseEvent[str]):
 
 
 class BrowserStateRequestEvent(BaseEvent[BrowserStateSummary]):
-	"""Request current browser state."""
+	"""Request comprehensive browser state information.
+	
+	@public
+	
+	Dispatch this event to get a complete snapshot of the current browser state,
+	including DOM structure, interactive elements, and optionally a screenshot.
+	
+	Attributes:
+		include_dom: If True, includes DOM tree and interactive elements
+		include_screenshot: If True, includes a screenshot of the page
+		cache_clickable_elements_hashes: If True, caches element hashes for stability
+		include_recent_events: If True, includes recent browser events in the summary
+	
+	Returns:
+		BrowserStateSummary containing page info, DOM state, and interactive elements
+	
+	Example:
+		>>> # Get full browser state
+		>>> event = browser_session.event_bus.dispatch(
+		...     BrowserStateRequestEvent(
+		...         include_dom=True,
+		...         include_screenshot=True
+		...     )
+		... )
+		>>> await event
+		>>> state = await event.event_result()
+		>>> print(f"URL: {state.url}")
+		>>> print(f"Interactive elements: {len(state.interactive_elements)}")
+	"""
 
 	include_dom: bool = True
 	include_screenshot: bool = True
@@ -172,25 +431,72 @@ class BrowserStateRequestEvent(BaseEvent[BrowserStateSummary]):
 
 
 class GoBackEvent(BaseEvent[None]):
-	"""Navigate back in browser history."""
+	"""Navigate back in browser history.
+	
+	@public
+	
+	Dispatch this event to navigate to the previous page in browser history.
+	
+	Example:
+		>>> # Go back one page
+		>>> event = browser_session.event_bus.dispatch(GoBackEvent())
+		>>> await event
+	"""
 
 	event_timeout: float | None = 15.0  # seconds
 
 
 class GoForwardEvent(BaseEvent[None]):
-	"""Navigate forward in browser history."""
+	"""Navigate forward in browser history.
+	
+	@public
+	
+	Dispatch this event to navigate to the next page in browser history.
+	
+	Example:
+		>>> # Go forward one page
+		>>> event = browser_session.event_bus.dispatch(GoForwardEvent())
+		>>> await event
+	"""
 
 	event_timeout: float | None = 15.0  # seconds
 
 
 class RefreshEvent(BaseEvent[None]):
-	"""Refresh/reload the current page."""
+	"""Refresh/reload the current page.
+	
+	@public
+	
+	Dispatch this event to reload the current page.
+	
+	Example:
+		>>> # Refresh the page
+		>>> event = browser_session.event_bus.dispatch(RefreshEvent())
+		>>> await event
+	"""
 
 	event_timeout: float | None = 15.0  # seconds
 
 
 class WaitEvent(BaseEvent[None]):
-	"""Wait for a specified number of seconds."""
+	"""Wait for a specified number of seconds.
+	
+	@public
+	
+	Dispatch this event to pause execution for a specified duration.
+	Useful for waiting for dynamic content to load.
+	
+	Attributes:
+		seconds: Number of seconds to wait (default: 3.0)
+		max_seconds: Maximum allowed wait time (safety cap at 10.0)
+	
+	Example:
+		>>> # Wait 5 seconds
+		>>> event = browser_session.event_bus.dispatch(
+		...     WaitEvent(seconds=5.0)
+		... )
+		>>> await event
+	"""
 
 	seconds: float = 3.0
 	max_seconds: float = 10.0  # Safety cap
@@ -199,7 +505,29 @@ class WaitEvent(BaseEvent[None]):
 
 
 class SendKeysEvent(BaseEvent[None]):
-	"""Send keyboard keys/shortcuts."""
+	"""Send keyboard keys or shortcuts.
+	
+	@public
+	
+	Dispatch this event to send keyboard input or shortcuts to the page.
+	Supports special keys and key combinations.
+	
+	Attributes:
+		keys: Key string or combination (e.g., "Enter", "Control+a", "Escape")
+	
+	Example:
+		>>> # Send Enter key
+		>>> event = browser_session.event_bus.dispatch(
+		...     SendKeysEvent(keys="Enter")
+		... )
+		>>> await event
+		>>> 
+		>>> # Send Ctrl+A to select all
+		>>> event = browser_session.event_bus.dispatch(
+		...     SendKeysEvent(keys="Control+a")
+		... )
+		>>> await event
+	"""
 
 	keys: str  # e.g., "ctrl+a", "cmd+c", "Enter"
 
@@ -207,8 +535,14 @@ class SendKeysEvent(BaseEvent[None]):
 
 
 class UploadFileEvent(ElementSelectedEvent[None]):
-	"""Upload a file to an element."""
-
+	"""Upload a file to an element.
+	
+	@public
+	
+	An event class dispatched to handle file uploads. Used when the agent
+	needs to upload files to file input elements on web pages.
+	"""
+	
 	node: 'EnhancedDOMTreeNode'
 	file_path: str
 
@@ -217,8 +551,31 @@ class UploadFileEvent(ElementSelectedEvent[None]):
 
 class GetDropdownOptionsEvent(ElementSelectedEvent[dict[str, str]]):
 	"""Get all options from any dropdown (native <select>, ARIA menus, or custom dropdowns).
-
-	Returns a dict containing dropdown type, options list, and element metadata."""
+	
+	@public
+	
+	Dispatch this event to retrieve all available options from a dropdown element.
+	Works with native HTML selects, ARIA menus, and custom dropdown implementations.
+	
+	Attributes:
+		node: The dropdown element to get options from
+	
+	Returns:
+		Dict containing:
+			- 'message': Human-readable summary of options
+			- 'options': JSON string of available option values
+			- 'type': Type of dropdown detected
+	
+	Example:
+		>>> # Get options from a dropdown
+		>>> dropdown = await browser_session.get_element_by_index(15)
+		>>> event = browser_session.event_bus.dispatch(
+		...     GetDropdownOptionsEvent(node=dropdown)
+		... )
+		>>> await event
+		>>> options_data = await event.event_result()
+		>>> print(options_data['message'])
+	"""
 
 	node: 'EnhancedDOMTreeNode'
 
@@ -229,8 +586,33 @@ class GetDropdownOptionsEvent(ElementSelectedEvent[dict[str, str]]):
 
 class SelectDropdownOptionEvent(ElementSelectedEvent[dict[str, str]]):
 	"""Select a dropdown option by exact text from any dropdown type.
-
-	Returns a dict containing success status and selection details."""
+	
+	@public
+	
+	Dispatch this event to select an option from a dropdown by its text value.
+	Works with native HTML selects, ARIA menus, and custom dropdown implementations.
+	
+	Attributes:
+		node: The dropdown element to select from
+		text: The exact text of the option to select
+	
+	Returns:
+		Dict containing:
+			- 'message': Human-readable confirmation of selection
+			- 'success': Boolean indicating if selection succeeded
+	
+	Example:
+		>>> # Select an option from dropdown
+		>>> dropdown = await browser_session.get_element_by_index(15)
+		>>> event = browser_session.event_bus.dispatch(
+		...     SelectDropdownOptionEvent(
+		...         node=dropdown,
+		...         text="United States"
+		...     )
+		... )
+		>>> await event
+		>>> result = await event.event_result()
+	"""
 
 	node: 'EnhancedDOMTreeNode'
 	text: str  # The option text to select
@@ -239,7 +621,31 @@ class SelectDropdownOptionEvent(ElementSelectedEvent[dict[str, str]]):
 
 
 class ScrollToTextEvent(BaseEvent[None]):
-	"""Scroll to specific text on the page. Raises exception if text not found."""
+	"""Scroll to specific text on the page.
+	
+	@public
+	
+	Dispatch this event to scroll the page until specific text is visible.
+	Raises an exception if the text is not found on the page.
+	
+	Attributes:
+		text: The text to scroll to
+		direction: Search direction ('up' or 'down', default: 'down')
+	
+	Raises:
+		Exception: If the text is not found on the page
+	
+	Example:
+		>>> # Scroll to specific text
+		>>> event = browser_session.event_bus.dispatch(
+		...     ScrollToTextEvent(text="Contact Us")
+		... )
+		>>> try:
+		...     await event
+		...     print("Text found and scrolled into view")
+		... except Exception:
+		...     print("Text not found on page")
+	"""
 
 	text: str
 	direction: Literal['up', 'down'] = 'down'
@@ -251,7 +657,25 @@ class ScrollToTextEvent(BaseEvent[None]):
 
 
 class BrowserStartEvent(BaseEvent):
-	"""Start/connect to browser."""
+	"""Start or connect to a browser instance.
+	
+	@public
+	
+	Dispatch this event to start a new browser or connect to an existing one.
+	
+	Attributes:
+		cdp_url: Optional Chrome DevTools Protocol URL to connect to
+		launch_options: Dictionary of browser launch options
+	
+	Example:
+		>>> # Start a new browser
+		>>> event = browser_session.event_bus.dispatch(
+		...     BrowserStartEvent(
+		...         launch_options={'headless': False}
+		...     )
+		... )
+		>>> await event
+	"""
 
 	cdp_url: str | None = None
 	launch_options: dict[str, Any] = Field(default_factory=dict)
@@ -260,7 +684,22 @@ class BrowserStartEvent(BaseEvent):
 
 
 class BrowserStopEvent(BaseEvent):
-	"""Stop/disconnect from browser."""
+	"""Stop or disconnect from browser.
+	
+	@public
+	
+	Dispatch this event to stop the browser and clean up resources.
+	
+	Attributes:
+		force: If True, forcefully terminates the browser
+	
+	Example:
+		>>> # Gracefully stop browser
+		>>> event = browser_session.event_bus.dispatch(
+		...     BrowserStopEvent(force=False)
+		... )
+		>>> await event
+	"""
 
 	force: bool = False
 
@@ -268,14 +707,39 @@ class BrowserStopEvent(BaseEvent):
 
 
 class BrowserLaunchResult(BaseModel):
-	"""Result of launching a browser."""
+	"""Result of launching a browser.
+	
+	@public
+	
+	Data model returned after successfully launching a browser.
+	
+	Attributes:
+		cdp_url: Chrome DevTools Protocol URL for connecting to the browser
+	"""
 
 	# TODO: add browser executable_path, pid, version, latency, user_data_dir, X11 $DISPLAY, host IP address, etc.
 	cdp_url: str
 
 
 class BrowserLaunchEvent(BaseEvent[BrowserLaunchResult]):
-	"""Launch a local browser process."""
+	"""Launch a local browser process.
+	
+	@public
+	
+	Dispatch this event to launch a new browser process locally.
+	
+	Returns:
+		BrowserLaunchResult containing the CDP URL of the launched browser
+	
+	Example:
+		>>> # Launch a new browser
+		>>> event = browser_session.event_bus.dispatch(
+		...     BrowserLaunchEvent()
+		... )
+		>>> await event
+		>>> result = await event.event_result()
+		>>> print(f"Browser CDP URL: {result.cdp_url}")
+	"""
 
 	# TODO: add executable_path, proxy settings, preferences, extra launch args, etc.
 
@@ -283,7 +747,20 @@ class BrowserLaunchEvent(BaseEvent[BrowserLaunchResult]):
 
 
 class BrowserKillEvent(BaseEvent):
-	"""Kill local browser subprocess."""
+	"""Kill local browser subprocess.
+	
+	@public
+	
+	Dispatch this event to forcefully terminate the browser process.
+	This is more aggressive than BrowserStopEvent.
+	
+	Example:
+		>>> # Force kill browser process
+		>>> event = browser_session.event_bus.dispatch(
+		...     BrowserKillEvent()
+		... )
+		>>> await event
+	"""
 
 	event_timeout: float | None = 30.0  # seconds
 
@@ -334,7 +811,22 @@ class BrowserKillEvent(BaseEvent):
 
 
 class BrowserConnectedEvent(BaseEvent):
-	"""Browser has started/connected."""
+	"""Browser has started/connected.
+	
+	@public
+	
+	This event is emitted when a browser successfully connects.
+	Typically used for monitoring and logging.
+	
+	Attributes:
+		cdp_url: The CDP URL of the connected browser
+	
+	Example:
+		>>> # Listen for browser connection
+		>>> @browser_session.event_bus.on(BrowserConnectedEvent)
+		>>> async def on_connected(event: BrowserConnectedEvent):
+		...     print(f"Browser connected: {event.cdp_url}")
+	"""
 
 	cdp_url: str
 
@@ -342,7 +834,22 @@ class BrowserConnectedEvent(BaseEvent):
 
 
 class BrowserStoppedEvent(BaseEvent):
-	"""Browser has stopped/disconnected."""
+	"""Browser has stopped/disconnected.
+	
+	@public
+	
+	This event is emitted when a browser disconnects or stops.
+	Typically used for cleanup and error handling.
+	
+	Attributes:
+		reason: Optional reason for the disconnection
+	
+	Example:
+		>>> # Listen for browser disconnection
+		>>> @browser_session.event_bus.on(BrowserStoppedEvent)
+		>>> async def on_stopped(event: BrowserStoppedEvent):
+		...     print(f"Browser stopped: {event.reason}")
+	"""
 
 	reason: str | None = None
 
@@ -350,7 +857,22 @@ class BrowserStoppedEvent(BaseEvent):
 
 
 class TabCreatedEvent(BaseEvent):
-	"""A new tab was created."""
+	"""A new tab was created.
+	
+	@public
+	
+	This event is emitted when a new browser tab is created.
+	
+	Attributes:
+		target_id: The target ID of the newly created tab
+		url: The initial URL of the new tab
+	
+	Example:
+		>>> # Listen for new tabs
+		>>> @browser_session.event_bus.on(TabCreatedEvent)
+		>>> async def on_tab_created(event: TabCreatedEvent):
+		...     print(f"New tab: {event.url} (ID: {event.target_id})")
+	"""
 
 	target_id: TargetID
 	url: str
@@ -359,7 +881,21 @@ class TabCreatedEvent(BaseEvent):
 
 
 class TabClosedEvent(BaseEvent):
-	"""A tab was closed."""
+	"""A tab was closed.
+	
+	@public
+	
+	This event is emitted when a browser tab is closed.
+	
+	Attributes:
+		target_id: The target ID of the closed tab
+	
+	Example:
+		>>> # Listen for tab closures
+		>>> @browser_session.event_bus.on(TabClosedEvent)
+		>>> async def on_tab_closed(event: TabClosedEvent):
+		...     print(f"Tab closed: {event.target_id}")
+	"""
 
 	target_id: TargetID
 
@@ -379,7 +915,23 @@ class TabClosedEvent(BaseEvent):
 
 
 class AgentFocusChangedEvent(BaseEvent):
-	"""Agent focus changed to a different tab."""
+	"""Agent focus changed to a different tab.
+	
+	@public
+	
+	This event is emitted when the agent's focus switches to a different tab.
+	Useful for tracking which tab the agent is currently working with.
+	
+	Attributes:
+		target_id: The target ID of the newly focused tab
+		previous_target_id: The target ID of the previously focused tab
+	
+	Example:
+		>>> # Track agent focus changes
+		>>> @browser_session.event_bus.on(AgentFocusChangedEvent)
+		>>> async def on_focus_changed(event: AgentFocusChangedEvent):
+		...     print(f"Agent switched from {event.previous_target_id} to {event.target_id}")
+	"""
 
 	target_id: TargetID
 	url: str
@@ -397,7 +949,29 @@ class TargetCrashedEvent(BaseEvent):
 
 
 class NavigationStartedEvent(BaseEvent):
-	"""Navigation started."""
+	"""Navigation to a URL has started.
+	
+	@public
+	
+	This event is emitted when navigation to a new URL begins.
+	Used for tracking navigation lifecycle and implementing
+	navigation-aware functionality. In browser-use 0.7, this event
+	helps replace Playwright's wait_for_load_state by providing
+	explicit navigation lifecycle tracking.
+	
+	Attributes:
+		target_id: The target ID of the tab being navigated
+		url: The URL being navigated to
+		event_timeout: Timeout for the navigation event in seconds (default: 30.0)
+	
+	Example:
+		>>> # Listen for navigation start
+		>>> @browser_session.event_bus.on(NavigationStartedEvent)
+		>>> async def on_navigation_start(event: NavigationStartedEvent):
+		...     print(f"Navigating to {event.url}")
+		...     # Can track navigation timing here
+		...     self.nav_start_time = time.time()
+	"""
 
 	target_id: TargetID
 	url: str
@@ -406,7 +980,36 @@ class NavigationStartedEvent(BaseEvent):
 
 
 class NavigationCompleteEvent(BaseEvent):
-	"""Navigation completed."""
+	"""Navigation to a URL has completed.
+	
+	@public
+	
+	This event is emitted when navigation to a URL completes (successfully or not).
+	Used for tracking navigation lifecycle, implementing post-navigation logic,
+	and handling navigation errors. In browser-use 0.7, this event can be used
+	to implement custom waiting logic for dynamic content after page navigation.
+	
+	Attributes:
+		target_id: The target ID of the tab that completed navigation
+		url: The final URL after navigation (may differ from requested due to redirects)
+		status: HTTP status code of the navigation (e.g., 200, 404, None if error)
+		error_message: Error or timeout message if navigation had issues
+		loading_status: Detailed loading status (e.g., network timeout info)
+		event_timeout: Timeout for the event in seconds (default: 30.0)
+	
+	Example:
+		>>> # Listen for navigation completion
+		>>> @browser_session.event_bus.on(NavigationCompleteEvent)
+		>>> async def on_navigation_complete(event: NavigationCompleteEvent):
+		...     if event.error_message:
+		...         print(f"Navigation failed: {event.error_message}")
+		...     else:
+		...         print(f"Navigated to {event.url} (status: {event.status})")
+		...         # Can now poll for dynamic content
+		...         await asyncio.sleep(0.5)
+		...         state = await browser_session.get_browser_state_summary()
+		...         # Check for elements that should appear after navigation
+	"""
 
 	target_id: TargetID
 	url: str
@@ -520,8 +1123,7 @@ class DialogOpenedEvent(BaseEvent):
 
 
 def _check_event_names_dont_overlap():
-	"""
-	check that event names defined in this file are valid and non-overlapping
+	"""Check that event names defined in this file are valid and non-overlapping
 	(naiively n^2 so it's pretty slow but ok for now, optimize when >20 events)
 	"""
 	event_names = {

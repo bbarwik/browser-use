@@ -1,3 +1,4 @@
+"""Browser views and data models for tab information and state management."""
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -15,7 +16,24 @@ PLACEHOLDER_4PX_SCREENSHOT = (
 
 # Pydantic
 class TabInfo(BaseModel):
-	"""Represents information about a browser tab"""
+	"""Represents information about a browser tab
+	
+	@public
+	
+	Contains metadata about an individual browser tab including its URL,
+	title, and Chrome DevTools Protocol target identifiers.
+	
+	Attributes:
+		url: The current URL of the tab
+		title: The page title displayed in the tab
+		target_id: Unique identifier for the Chrome DevTools Protocol target
+		parent_target_id: Optional ID of parent tab (for popups/iframes)
+	
+	Example:
+		>>> tabs = await browser_session.get_tabs()
+		>>> for tab in tabs:
+		...     print(f'{tab.title}: {tab.url}')
+	"""
 
 	model_config = ConfigDict(
 		extra='forbid',
@@ -34,15 +52,51 @@ class TabInfo(BaseModel):
 
 	@field_serializer('target_id')
 	def serialize_target_id(self, target_id: TargetID, _info: Any) -> str:
+		"""Serialize target ID to short form for display.
+		
+		Args:
+			target_id: The target identifier.
+			_info: Serialization info (unused).
+			
+		Returns:
+			Last 4 characters of the target ID.
+		"""
 		return target_id[-4:]
 
 	@field_serializer('parent_target_id')
 	def serialize_parent_target_id(self, parent_target_id: TargetID | None, _info: Any) -> str | None:
+		"""Serialize parent target ID to short form for display.
+		
+		Args:
+			parent_target_id: The parent target identifier.
+			_info: Serialization info (unused).
+			
+		Returns:
+			Last 4 characters of parent target ID, or None if no parent.
+		"""
 		return parent_target_id[-4:] if parent_target_id else None
 
 
 class PageInfo(BaseModel):
-	"""Comprehensive page size and scroll information"""
+	"""Comprehensive page size and scroll information
+	
+	@public
+	
+	Contains detailed information about page dimensions, viewport size,
+	and current scroll position. Used internally by BrowserStateSummary.
+	
+	Attributes:
+		viewport_width: Width of the visible viewport in pixels
+		viewport_height: Height of the visible viewport in pixels
+		page_width: Total width of the page content in pixels
+		page_height: Total height of the page content in pixels
+		scroll_x: Horizontal scroll position in pixels
+		scroll_y: Vertical scroll position in pixels
+		pixels_above: Pixels scrolled above the current viewport
+		pixels_below: Pixels remaining below the current viewport
+		pixels_left: Pixels scrolled to the left of viewport
+		pixels_right: Pixels remaining to the right of viewport
+	"""
 
 	# Current viewport dimensions
 	viewport_width: int
@@ -67,7 +121,51 @@ class PageInfo(BaseModel):
 
 @dataclass
 class BrowserStateSummary:
-	"""The summary of the browser's current state designed for an LLM to process"""
+	"""The summary of the browser's current state designed for an LLM to process.
+	
+	@public
+	
+	Contains a complete snapshot of the browser state including DOM, screenshots,
+	and interactive elements. This object is returned by get_browser_state_summary()
+	and is the primary way to access page state in browser-use 0.7.
+	
+	Main Fields:
+		dom_state: SerializedDOMState with DOM tree and selector_map
+		url: Current page URL
+		title: Page title
+		tabs: List of open tabs with their information
+		screenshot: Base64-encoded screenshot (if vision enabled)
+		page_info: Enhanced page metadata (scroll position, dimensions)
+		
+	DOM State Fields (via dom_state):
+		selector_map: Dictionary mapping element indices to EnhancedDOMTreeNode objects
+			Key: integer index for element identification
+			Value: EnhancedDOMTreeNode with full element information
+		llm_representation(): Method to get string representation of DOM tree
+		
+	Additional Fields:
+		pixels_above/below: Scroll position indicators
+		browser_errors: List of any browser errors encountered
+		is_pdf_viewer: Whether viewing a PDF document
+		recent_events: Summary of recent browser interactions
+	
+	Example:
+		>>> # Get browser state for element interaction
+		>>> state = await browser_session.get_browser_state_summary()
+		>>> print(f"URL: {state.url}")
+		>>> print(f"Interactive elements: {len(state.dom_state.selector_map)}")
+		>>> 
+		>>> # Find and interact with elements by index
+		>>> for index, element in state.dom_state.selector_map.items():
+		...     if element.tag_name == 'INPUT':
+		...         print(f"Input [{index}]: {element.attributes.get('name', 'unnamed')}")
+		...         # Can now interact using the index
+		...         actual_element = await browser_session.get_element_by_index(index)
+		...         if actual_element:
+		...             await browser_session.event_bus.dispatch(
+		...                 TypeTextEvent(node=actual_element, text="example text")
+		...             )
+	"""
 
 	# provided by SerializedDOMState:
 	dom_state: SerializedDOMState
@@ -88,7 +186,34 @@ class BrowserStateSummary:
 
 @dataclass
 class BrowserStateHistory:
-	"""The summary of the browser's state at a past point in time to usse in LLM message history"""
+	"""Browser state at a past point in time for LLM message history
+	
+	@public
+	
+	Captures a snapshot of browser state at a specific moment, used for
+	maintaining conversation history with the LLM. Unlike BrowserStateSummary,
+	this stores screenshot paths rather than the actual screenshot data.
+	
+	Attributes:
+		url: The URL at the time of snapshot
+		title: The page title at the time of snapshot
+		tabs: List of TabInfo objects representing open tabs
+		interacted_element: Elements that were interacted with (clicked, typed into, etc.)
+		screenshot_path: Optional filesystem path to the saved screenshot
+	
+	Methods:
+		get_screenshot(): Load screenshot from disk and return as base64
+		to_dict(): Convert to dictionary format for serialization
+	
+	Example:
+		>>> history = BrowserStateHistory(
+		...     url="https://example.com",
+		...     title="Example Page",
+		...     tabs=tabs_list,
+		...     interacted_element=[clicked_element]
+		... )
+		>>> screenshot_b64 = history.get_screenshot()
+	"""
 
 	url: str
 	title: str
@@ -116,6 +241,11 @@ class BrowserStateHistory:
 			return None
 
 	def to_dict(self) -> dict[str, Any]:
+		"""Convert browser state history to dictionary format.
+		
+		Returns:
+			Dictionary representation of the browser state history.
+		"""
 		data = {}
 		data['tabs'] = [tab.model_dump() for tab in self.tabs]
 		data['screenshot_path'] = self.screenshot_path

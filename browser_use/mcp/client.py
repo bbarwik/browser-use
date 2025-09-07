@@ -45,7 +45,49 @@ MCP_AVAILABLE = True
 
 
 class MCPClient:
-	"""Client for connecting to MCP servers and exposing their tools as browser-use actions."""
+	"""Client for connecting to MCP servers and exposing their tools as browser-use actions.
+	
+	@public
+	
+	Enables integration with Model Context Protocol (MCP) servers, allowing browser-use
+	agents to leverage external tools and services via MCP. MCP tools are dynamically
+	discovered and registered as browser-use actions.
+	
+	MCP Client vs Server Distinction:
+		MCPClient (this class): CONSUMES tools from external MCP servers
+			- Connects to MCP server processes (filesystem, playwright, etc.)
+			- Discovers available tools from the server
+			- Registers them as browser-use actions
+			- Browser-use acts as a CLIENT to external tool providers
+		
+		MCP Server (separate): Browser-use can also PROVIDE tools via MCP
+			- Exposes browser-use capabilities to other MCP clients
+			- Allows external apps to use browser automation
+			- Run via: browser-use mcp-server
+			- Browser-use acts as a SERVER providing tools
+	
+	Tool Schema Mapping:
+		MCP tools are automatically converted to browser-use actions:
+		- Parameters mapped to Pydantic models
+		- Results converted to ActionResult
+		- Streaming/binary outputs handled transparently
+	
+	Security Considerations:
+		- Only connect to trusted MCP servers
+		- Tools execute with full system access
+		- Use tool_filter to restrict available tools
+		- Validate server responses for untrusted sources
+	
+	Example:
+		>>> mcp = MCPClient(
+		...     server_name="filesystem",
+		...     command="npx",
+		...     args=["@modelcontextprotocol/server-filesystem"],
+		...     env={"FILESYSTEM_ROOT": "/safe/path"}
+		... )
+		>>> await mcp.connect()
+		>>> tools = await mcp.register_to_tools(agent.tools)
+	"""
 
 	def __init__(
 		self,
@@ -78,7 +120,25 @@ class MCPClient:
 		self._telemetry = ProductTelemetry()
 
 	async def connect(self) -> None:
-		"""Connect to the MCP server and discover available tools."""
+		"""Connect to the MCP server and discover available tools.
+		
+		@public
+		
+		Establishes a connection with an MCP server and discovers all available tools.
+		Tools are cached internally and can be registered with browser-use Tools after
+		connection is established.
+		
+		Raises:
+			RuntimeError: If connection to the MCP server fails.
+			
+		Example:
+			>>> mcp_client = MCPClient(
+			...     server_name="my-server",
+			...     command="npx",
+			...     args=["@mycompany/mcp-server@latest"]
+			... )
+			>>> await mcp_client.connect()
+		"""
 		if self._connected:
 			logger.debug(f'Already connected to {self.server_name}')
 			return
@@ -159,7 +219,16 @@ class MCPClient:
 			self.session = None
 
 	async def disconnect(self) -> None:
-		"""Disconnect from the MCP server."""
+		"""Disconnect from the MCP server.
+		
+		@public
+		
+		Terminates the connection to the MCP server and cleans up resources.
+		Unregisters all MCP tools from the browser-use Tools registry.
+		
+		Example:
+			>>> await mcp_client.disconnect()
+		"""
 		if not self._connected:
 			return
 
@@ -215,10 +284,21 @@ class MCPClient:
 	) -> None:
 		"""Register MCP tools as actions in the browser-use tools.
 
+		@public
+
+		Registers all discovered MCP tools as browser-use actions, making them available
+		for agents to use during automation tasks. Tools can be filtered or prefixed
+		to avoid naming conflicts.
+
 		Args:
 			tools: Browser-use tools to register actions to
 			tool_filter: Optional list of tool names to register (None = all tools)
 			prefix: Optional prefix to add to action names (e.g., "playwright_")
+			
+		Example:
+			>>> tools = Tools()
+			>>> await mcp_client.register_to_tools(tools)
+			>>> # Now agents can use MCP tools as actions
 		"""
 		if not self._connected:
 			await self.connect()

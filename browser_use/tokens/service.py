@@ -1,5 +1,4 @@
-"""
-Token cost service that tracks LLM token usage and costs.
+"""Token cost service that tracks LLM token usage and costs.
 
 Fetches pricing data from LiteLLM repository and caches it for 1 day.
 Automatically tracks token usage when LLMs are registered and invoked.
@@ -37,6 +36,11 @@ cost_logger = logging.getLogger('cost')
 
 
 def xdg_cache_home() -> Path:
+	"""Get the XDG cache home directory.
+	
+	Returns:
+		Path to the cache directory.
+	"""
 	default = Path.home() / '.cache'
 	if CONFIG.XDG_CACHE_HOME and (path := Path(CONFIG.XDG_CACHE_HOME)).is_absolute():
 		return path
@@ -183,6 +187,7 @@ class TokenCost:
 		)
 
 	async def calculate_cost(self, model: str, usage: ChatInvokeUsage) -> TokenCostCalculated | None:
+		"""Calculate cost for token usage of a given model."""
 		if not self.include_cost:
 			return None
 
@@ -301,8 +306,7 @@ class TokenCost:
 		return ' + '.join(parts)
 
 	def register_llm(self, llm: BaseChatModel) -> BaseChatModel:
-		"""
-		Register an LLM to automatically track its token usage
+		"""Register an LLM to automatically track its token usage
 
 		@dev Guarantees that the same instance is not registered multiple times
 		"""
@@ -323,6 +327,7 @@ class TokenCost:
 
 		# Create a wrapped version that tracks usage
 		async def tracked_ainvoke(messages, output_format=None):
+			"""Wrapped ainvoke method that tracks token usage."""
 			# Call the original method
 			result = await original_ainvoke(messages, output_format)
 

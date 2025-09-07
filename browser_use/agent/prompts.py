@@ -1,3 +1,4 @@
+"""Agent prompt generation and management."""
 import importlib.resources
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal, Optional
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
 
 
 class SystemPrompt:
+	"""System prompt builder for agent interactions."""
 	def __init__(
 		self,
 		action_description: str,
@@ -56,8 +58,7 @@ class SystemPrompt:
 			raise RuntimeError(f'Failed to load system prompt template: {e}')
 
 	def get_system_message(self) -> SystemMessage:
-		"""
-		Get the system prompt for the agent.
+		"""Get the system prompt for the agent.
 
 		Returns:
 		    SystemMessage: Formatted system prompt
@@ -75,6 +76,7 @@ class SystemPrompt:
 
 
 class AgentMessagePrompt:
+	"""User message prompt builder for agent step interactions."""
 	vision_detail_level: Literal['auto', 'low', 'high']
 
 	def __init__(
@@ -112,6 +114,11 @@ class AgentMessagePrompt:
 
 	@observe_debug(ignore_input=True, ignore_output=True, name='_get_browser_state_description')
 	def _get_browser_state_description(self) -> str:
+		"""Generate browser state description including DOM elements and tabs.
+		
+		Returns:
+			Formatted browser state description for the LLM.
+		"""
 		elements_text = self.browser_state.dom_state.llm_representation(include_attributes=self.include_attributes)
 
 		if len(elements_text) > self.max_clickable_elements_length:
@@ -193,6 +200,11 @@ Available tabs:
 		return browser_state
 
 	def _get_agent_state_description(self) -> str:
+		"""Generate agent state description including task, file system, and step info.
+		
+		Returns:
+			Formatted agent state description for the LLM.
+		"""
 		if self.step_info:
 			step_info_description = f'Step {self.step_info.step_number + 1} of {self.step_info.max_steps} max possible steps\n'
 		else:
@@ -226,7 +238,17 @@ Available tabs:
 
 	@observe_debug(ignore_input=True, ignore_output=True, name='get_user_message')
 	def get_user_message(self, use_vision: bool = True) -> UserMessage:
-		"""Get complete state as a single cached message"""
+		"""Get complete state as a single cached message.
+		
+		Combines agent state, browser state, and optional screenshots into a
+		single user message for the LLM.
+		
+		Args:
+			use_vision: Whether to include screenshots in the message.
+			
+		Returns:
+			UserMessage containing the complete state description.
+		"""
 		# Don't pass screenshot to model if page is a new tab page, step is 0, and there's only one tab
 		if (
 			is_new_tab_page(self.browser_state.url)

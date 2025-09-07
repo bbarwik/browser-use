@@ -1,5 +1,4 @@
-"""
-OAuth2 Device Authorization Grant flow client for browser-use.
+"""OAuth2 Device Authorization Grant flow client for browser-use.
 """
 
 import asyncio
@@ -55,7 +54,6 @@ class CloudAuthConfig(BaseModel):
 	@classmethod
 	def load_from_file(cls) -> 'CloudAuthConfig':
 		"""Load auth config from local file"""
-
 		config_path = CONFIG.BROWSER_USE_CONFIG_DIR / 'cloud_auth.json'
 		if config_path.exists():
 			try:
@@ -69,7 +67,6 @@ class CloudAuthConfig(BaseModel):
 
 	def save_to_file(self) -> None:
 		"""Save auth config to local file"""
-
 		CONFIG.BROWSER_USE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 		config_path = CONFIG.BROWSER_USE_CONFIG_DIR / 'cloud_auth.json'
@@ -124,8 +121,7 @@ class DeviceAuthClient:
 		self,
 		agent_session_id: str | None = None,
 	) -> dict:
-		"""
-		Start the device authorization flow.
+		"""Start the device authorization flow.
 		Returns device authorization details including user code and verification URL.
 		"""
 		if self.http_client:
@@ -160,8 +156,7 @@ class DeviceAuthClient:
 		interval: float = 3.0,
 		timeout: float = 1800.0,
 	) -> dict | None:
-		"""
-		Poll for the access token.
+		"""Poll for the access token.
 		Returns token info when authorized, None if timeout.
 		"""
 		start_time = time.time()
@@ -277,8 +272,7 @@ class DeviceAuthClient:
 		agent_session_id: str | None = None,
 		show_instructions: bool = True,
 	) -> bool:
-		"""
-		Run the full authentication flow.
+		"""Run the full authentication flow.
 		Returns True if authentication successful.
 		"""
 		import logging

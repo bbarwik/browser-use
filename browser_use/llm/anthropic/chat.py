@@ -1,3 +1,4 @@
+"""Anthropic Claude chat model implementation."""
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -31,8 +32,91 @@ T = TypeVar('T', bound=BaseModel)
 
 @dataclass
 class ChatAnthropic(BaseChatModel):
-	"""
-	A wrapper around Anthropic's chat model.
+	"""Anthropic Claude chat model integration for browser automation.
+	
+	@public
+	
+	Provides access to Anthropic's Claude models with advanced reasoning capabilities,
+	long context understanding, and multimodal processing. Supports Claude 3.5 Sonnet,
+	Claude 3 Haiku, Claude 3 Opus, and other Claude family models.
+	
+	Constructor Parameters:
+		model: Claude model to use
+			- "claude-3-5-sonnet-latest": Most capable, balanced (recommended)
+			- "claude-3-5-haiku-latest": Fast and cost-effective
+			- "claude-3-opus-latest": Highest capability for complex tasks
+			- "claude-3-sonnet-20240229": Previous Sonnet version
+			- "claude-3-haiku-20240307": Previous Haiku version
+		
+		api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
+		
+		max_tokens: Maximum tokens in response (default: 8192, max: 8192)
+			Note: Claude requires explicit max_tokens, unlike OpenAI
+		
+		temperature: Sampling temperature 0-1 (default: None)
+			Lower values = more deterministic
+		
+		top_p: Nucleus sampling threshold (default: None)
+		
+		seed: Random seed for deterministic outputs (beta feature)
+		
+		base_url: Custom API endpoint (for proxies/gateways)
+		
+		timeout: Request timeout in seconds
+		
+		max_retries: Retry attempts on failure (default: 10)
+	
+	Feature Support:
+		- Tool Calling: Yes (native tool use)
+		- Structured Output: Yes (via tool use or prompting)
+		- Vision: Yes (all Claude 3+ models)
+		- Context: 200k tokens (all models)
+		- Caching: Yes (prompt caching for repeated content)
+		- Computer Use: Yes (Claude 3.5 Sonnet only, beta)
+	
+	Prompt Caching:
+		Claude supports automatic caching of repeated prompt content to reduce
+		costs and latency. The system automatically marks static content for
+		caching when the same context is used multiple times.
+	
+	Vision Capabilities:
+		All Claude 3+ models support image understanding. The agent automatically
+		includes screenshots when use_vision=True. Claude excels at:
+		- UI element detection and interaction
+		- Text extraction from images
+		- Visual reasoning and analysis
+		- Chart and diagram understanding
+	
+	Example:
+		>>> # Basic usage
+		>>> llm = ChatAnthropic(
+		...     model="claude-3-5-sonnet-latest",
+		...     api_key="sk-ant-...",  # or set ANTHROPIC_API_KEY env var
+		...     max_tokens=8192,
+		... )
+		>>> agent = Agent(task="Navigate and fill forms", llm=llm)
+		
+		>>> # Fast, cost-effective model
+		>>> llm = ChatAnthropic(
+		...     model="claude-3-5-haiku-latest",
+		...     max_tokens=4096,
+		...     temperature=0.3,
+		... )
+		
+		>>> # Maximum capability for complex tasks
+		>>> llm = ChatAnthropic(
+		...     model="claude-3-opus-latest",
+		...     max_tokens=8192,
+		...     temperature=0.7,
+		... )
+	
+	Best Practices:
+		- Use Sonnet for balanced performance and capability
+		- Use Haiku for high-volume, simpler tasks
+		- Use Opus when maximum reasoning is required
+		- Always set max_tokens (required parameter)
+		- Enable vision for UI automation tasks
+		- Leverage prompt caching for repeated contexts
 	"""
 
 	# Model configuration
@@ -79,7 +163,6 @@ class ChatAnthropic(BaseChatModel):
 
 	def _get_client_params_for_invoke(self):
 		"""Prepare client parameters dictionary for invoke."""
-
 		client_params = {}
 
 		if self.temperature is not None:
@@ -97,8 +180,7 @@ class ChatAnthropic(BaseChatModel):
 		return client_params
 
 	def get_client(self) -> AsyncAnthropic:
-		"""
-		Returns an AsyncAnthropic client.
+		"""Returns an AsyncAnthropic client.
 
 		Returns:
 			AsyncAnthropic: An instance of the AsyncAnthropic client.
@@ -133,6 +215,15 @@ class ChatAnthropic(BaseChatModel):
 	async def ainvoke(
 		self, messages: list[BaseMessage], output_format: type[T] | None = None
 	) -> ChatInvokeCompletion[T] | ChatInvokeCompletion[str]:
+		"""Invoke Anthropic's Claude model asynchronously.
+		
+		Args:
+			messages: List of messages to send to Claude.
+			output_format: Optional Pydantic model for structured output.
+			
+		Returns:
+			Chat completion with response content and usage information.
+		"""
 		anthropic_messages, system_prompt = AnthropicMessageSerializer.serialize_messages(messages)
 
 		try:

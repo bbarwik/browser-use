@@ -1,3 +1,4 @@
+"""DOM element highlighting utilities for debugging."""
 # 100% vibe coded
 
 import json

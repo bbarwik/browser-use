@@ -1,5 +1,4 @@
-"""
-Utilities for creating optimized Pydantic schemas for LLM usage.
+"""Utilities for creating optimized Pydantic schemas for LLM usage.
 """
 
 from typing import Any
@@ -8,10 +7,10 @@ from pydantic import BaseModel
 
 
 class SchemaOptimizer:
+	"""Utility class for optimizing Pydantic schemas for LLM consumption."""
 	@staticmethod
 	def create_optimized_json_schema(model: type[BaseModel]) -> dict[str, Any]:
-		"""
-		Create the most optimized schema by flattening all $ref/$defs while preserving
+		"""Create the most optimized schema by flattening all $ref/$defs while preserving
 		FULL descriptions and ALL action definitions. Also ensures OpenAI strict mode compatibility.
 
 		Args:

@@ -1,5 +1,4 @@
-"""
-Gmail Actions for Browser Use
+"""Gmail Actions for Browser Use
 Defines agent actions for Gmail integration including 2FA code retrieval,
 email reading, and authentication management.
 """
@@ -27,12 +26,27 @@ class GetRecentEmailsParams(BaseModel):
 
 
 def register_gmail_actions(tools: Tools, gmail_service: GmailService | None = None, access_token: str | None = None) -> Tools:
-	"""
-	Register Gmail actions with the provided tools
+	"""Register Gmail actions with the provided tools.
+	
+	@public
+	
+	Registers Gmail-related actions (like get_recent_emails) with the browser-use 
+	Tools registry, enabling agents to interact with Gmail during automation tasks.
+	
 	Args:
 	    tools: The browser-use tools to register actions with
 	    gmail_service: Optional pre-configured Gmail service instance
 	    access_token: Optional direct access token (alternative to file-based auth)
+	    
+	Returns:
+		Tools: The tools instance with Gmail actions registered.
+		
+	Example:
+		>>> from browser_use import Tools
+		>>> from browser_use.integrations.gmail import register_gmail_actions
+		>>> tools = Tools()
+		>>> tools = register_gmail_actions(tools)
+		>>> # Now the agent can use get_recent_emails action
 	"""
 	global _gmail_service
 

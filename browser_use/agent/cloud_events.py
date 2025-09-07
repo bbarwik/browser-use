@@ -1,3 +1,4 @@
+"""Agent cloud events for telemetry and monitoring."""
 import base64
 import os
 from datetime import datetime, timezone
@@ -16,6 +17,31 @@ MAX_FILE_CONTENT_SIZE = 50 * 1024 * 1024  # 50MB
 
 
 class UpdateAgentTaskEvent(BaseEvent):
+	"""Event for updating an agent task in the cloud.
+	
+	@public
+	
+	Used to synchronize agent task state changes with cloud services including 
+	completion status, pause/resume state, and output results. This enables
+	monitoring and control of agent tasks from external systems.
+	
+	Attributes:
+		id: Task ID to update
+		user_id: User identifier for authorization
+		device_id: Optional device ID for auth lookup
+		stopped: Whether task has been stopped
+		paused: Whether task is currently paused
+		done_output: Final output when task completes
+		finished_at: Timestamp of task completion
+		agent_state: Current agent state dictionary
+		user_feedback_type: Type of user feedback
+		user_comment: User comment/feedback text
+		gif_url: URL to generated GIF recording
+	
+	Example:
+		>>> event = UpdateAgentTaskEvent.from_agent(agent)
+		>>> await cloud_sync.send_event(event)
+	"""
 	# Required fields for identification
 	id: str  # The task ID to update
 	user_id: str = Field(max_length=255)  # For authorization
@@ -33,7 +59,17 @@ class UpdateAgentTaskEvent(BaseEvent):
 
 	@classmethod
 	def from_agent(cls, agent) -> 'UpdateAgentTaskEvent':
-		"""Create an UpdateAgentTaskEvent from an Agent instance"""
+		"""Create an UpdateAgentTaskEvent from an Agent instance.
+		
+		Args:
+			agent: The agent instance to create the event from.
+			
+		Returns:
+			A new UpdateAgentTaskEvent instance.
+			
+		Raises:
+			ValueError: If agent doesn't have required _task_start_time attribute.
+		"""
 		if not hasattr(agent, '_task_start_time'):
 			raise ValueError('Agent must have _task_start_time attribute')
 
@@ -58,6 +94,37 @@ class UpdateAgentTaskEvent(BaseEvent):
 
 
 class CreateAgentOutputFileEvent(BaseEvent):
+	"""Event for creating agent output files in the cloud.
+	
+	@public
+	
+	Used to upload files generated during agent execution like screenshots,
+	recordings, extracted content, or other artifacts to cloud storage.
+	
+	Attributes:
+		id: Unique file ID (auto-generated)
+		user_id: User identifier for authorization
+		device_id: Optional device ID for auth lookup
+		task_id: Associated task ID
+		file_name: Name of the file
+		file_content: Base64 encoded file content
+		content_type: MIME type of the file
+		created_at: Timestamp of file creation
+	
+	File Size Limits:
+		Maximum file size: 50MB (after base64 encoding)
+	
+	Example:
+		>>> # Upload a screenshot
+		>>> with open('screenshot.png', 'rb') as f:
+		...     content = base64.b64encode(f.read()).decode()
+		>>> event = CreateAgentOutputFileEvent(
+		...     task_id=agent.task_id,
+		...     file_name='screenshot.png',
+		...     file_content=content,
+		...     content_type='image/png'
+		... )
+	"""
 	# Model fields
 	id: str = Field(default_factory=uuid7str)
 	user_id: str = Field(max_length=255)
@@ -85,8 +152,18 @@ class CreateAgentOutputFileEvent(BaseEvent):
 
 	@classmethod
 	async def from_agent_and_file(cls, agent, output_path: str) -> 'CreateAgentOutputFileEvent':
-		"""Create a CreateAgentOutputFileEvent from a file path"""
-
+		"""Create a CreateAgentOutputFileEvent from a file path.
+		
+		Args:
+			agent: The agent instance that generated the file.
+			output_path: Path to the file to upload.
+			
+		Returns:
+			A new CreateAgentOutputFileEvent instance.
+			
+		Raises:
+			FileNotFoundError: If the specified file doesn't exist.
+		"""
 		gif_path = Path(output_path)
 		if not gif_path.exists():
 			raise FileNotFoundError(f'File not found: {output_path}')
@@ -113,6 +190,11 @@ class CreateAgentOutputFileEvent(BaseEvent):
 
 
 class CreateAgentStepEvent(BaseEvent):
+	"""Event for creating agent execution steps in the cloud.
+	
+	Captures individual step details including actions taken,
+	screenshots, and agent reasoning for cloud tracking.
+	"""
 	# Model fields
 	id: str = Field(default_factory=uuid7str)
 	user_id: str = Field(max_length=255)  # Added for authorization checks
@@ -145,7 +227,18 @@ class CreateAgentStepEvent(BaseEvent):
 	def from_agent_step(
 		cls, agent, model_output, result: list, actions_data: list[dict], browser_state_summary
 	) -> 'CreateAgentStepEvent':
-		"""Create a CreateAgentStepEvent from agent step data"""
+		"""Create a CreateAgentStepEvent from agent step data.
+		
+		Args:
+			agent: The agent instance executing the step.
+			model_output: The LLM model output for this step.
+			result: List of action results from this step.
+			actions_data: List of action dictionaries performed.
+			browser_state_summary: Current browser state including screenshot.
+			
+		Returns:
+			A new CreateAgentStepEvent instance.
+		"""
 		# Get first action details if available
 		first_action = model_output.action[0] if model_output.action else None
 
@@ -183,6 +276,7 @@ class CreateAgentStepEvent(BaseEvent):
 
 
 class CreateAgentTaskEvent(BaseEvent):
+	"""Event for creating a new agent task."""
 	# Model fields
 	id: str = Field(default_factory=uuid7str)
 	user_id: str = Field(max_length=255)  # Added for authorization checks
@@ -226,6 +320,7 @@ class CreateAgentTaskEvent(BaseEvent):
 
 
 class CreateAgentSessionEvent(BaseEvent):
+	"""Event for creating a new agent session."""
 	# Model fields
 	id: str = Field(default_factory=uuid7str)
 	user_id: str = Field(max_length=255)

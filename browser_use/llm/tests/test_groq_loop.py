@@ -1,3 +1,4 @@
+"""Tests for Groq loop functionality."""
 import asyncio
 
 from browser_use.llm import ContentText
@@ -12,6 +13,7 @@ llm = ChatGroq(
 
 
 async def main():
+	"""Main test function to test Groq model looping behavior."""
 	from pydantic import BaseModel
 
 	from browser_use.tokens.service import TokenCost
@@ -19,6 +21,7 @@ async def main():
 	tk = TokenCost().register_llm(llm)
 
 	class Output(BaseModel):
+		"""Output format for testing structured responses."""
 		reasoning: str
 		answer: str
 

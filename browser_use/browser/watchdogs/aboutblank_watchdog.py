@@ -124,8 +124,7 @@ class AboutBlankWatchdog(BaseWatchdog):
 			self.logger.error(f'[AboutBlankWatchdog] Error showing DVD screensaver: {e}')
 
 	async def _show_dvd_screensaver_loading_animation_cdp(self, target_id: TargetID, browser_session_label: str) -> None:
-		"""
-		Injects a DVD screensaver-style bouncing logo loading animation overlay into the target using CDP.
+		"""Injects a DVD screensaver-style bouncing logo loading animation overlay into the target using CDP.
 		This is used to visually indicate that the browser is setting up or waiting.
 		"""
 		try:

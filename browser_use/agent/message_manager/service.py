@@ -1,3 +1,4 @@
+"""Agent message management service."""
 from __future__ import annotations
 
 import logging
@@ -93,6 +94,7 @@ def _log_format_message_line(message: BaseMessage, content: str, is_last_message
 
 
 class MessageManager:
+	"""Manages message history and context for agent interactions."""
 	vision_detail_level: Literal['auto', 'low', 'high']
 
 	def __init__(
@@ -160,6 +162,11 @@ class MessageManager:
 		return '\n'.join(items_to_include)
 
 	def add_new_task(self, new_task: str) -> None:
+		"""Add a new task to the message manager.
+		
+		Args:
+			new_task: The new task description.
+		"""
 		self.task = new_task
 		task_update_item = HistoryItem(system_message=f'User updated <user_request> to: {new_task}')
 		self.state.agent_history_items.append(task_update_item)
@@ -171,7 +178,6 @@ class MessageManager:
 		step_info: AgentStepInfo | None = None,
 	) -> None:
 		"""Update the agent history description"""
-
 		if result is None:
 			result = []
 		step_number = step_info.step_number if step_info else None
@@ -265,7 +271,6 @@ class MessageManager:
 		available_file_paths: list[str] | None = None,  # Always pass current available_file_paths
 	) -> None:
 		"""Create single state message with all content"""
-
 		# Clear contextual messages from previous steps to prevent accumulation
 		self.state.history.context_messages.clear()
 
@@ -345,7 +350,6 @@ class MessageManager:
 	@time_execution_sync('--get_messages')
 	def get_messages(self) -> list[BaseMessage]:
 		"""Get current message list, potentially trimmed to max tokens"""
-
 		# Log message history for debugging
 		logger.debug(self._log_history_lines())
 		self.last_input_messages = self.state.history.get_messages()

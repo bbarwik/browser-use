@@ -1,5 +1,4 @@
-"""
-Gmail API Service for Browser Use
+"""Gmail API Service for Browser Use
 Handles Gmail API authentication, email reading, and 2FA code extraction.
 This service provides a clean interface for agents to interact with Gmail.
 """
@@ -23,8 +22,10 @@ logger = logging.getLogger(__name__)
 
 
 class GmailService:
-	"""
-	Gmail API service for email reading.
+	"""Gmail API service for email reading.
+	
+	@public
+	
 	Provides functionality to:
 	- Authenticate with Gmail API using OAuth2
 	- Read recent emails with filtering
@@ -41,8 +42,7 @@ class GmailService:
 		config_dir: str | None = None,
 		access_token: str | None = None,
 	):
-		"""
-		Initialize Gmail Service
+		"""Initialize Gmail Service
 		Args:
 		    credentials_file: Path to OAuth credentials JSON from Google Cloud Console
 		    token_file: Path to store/load access tokens
@@ -71,14 +71,37 @@ class GmailService:
 		self._authenticated = False
 
 	def is_authenticated(self) -> bool:
-		"""Check if Gmail service is authenticated"""
+		"""Check if Gmail service is authenticated.
+		
+		@public
+		
+		Returns:
+			bool: True if the Gmail service is authenticated and ready to use.
+			
+		Example:
+			>>> gmail = GmailService()
+			>>> if not gmail.is_authenticated():
+			...     await gmail.authenticate()
+		"""
 		return self._authenticated and self.service is not None
 
 	async def authenticate(self) -> bool:
-		"""
-		Handle OAuth authentication and token management
+		"""Handle OAuth authentication and token management.
+		
+		@public
+		
+		Initiates the OAuth authentication flow for Gmail API access. Will use
+		existing tokens if available, refresh expired tokens, or start a new
+		OAuth flow if needed.
+		
 		Returns:
-		    bool: True if authentication successful, False otherwise
+		    bool: True if authentication successful, False otherwise.
+		    
+		Example:
+			>>> gmail = GmailService()
+			>>> success = await gmail.authenticate()
+			>>> if success:
+			...     emails = await gmail.get_recent_emails()
 		"""
 		try:
 			logger.info('🔐 Authenticating with Gmail API...')
@@ -138,12 +161,12 @@ class GmailService:
 			return False
 
 	async def get_recent_emails(self, max_results: int = 10, query: str = '', time_filter: str = '1h') -> list[dict[str, Any]]:
-		"""
-		Get recent emails with optional query filter
+		"""Get recent emails with optional query filter
 		Args:
 		    max_results: Maximum number of emails to fetch
 		    query: Gmail search query (e.g., 'from:noreply@example.com')
 		    time_filter: Time filter (e.g., '5m', '1h', '1d')
+
 		Returns:
 		    List of email dictionaries with parsed content
 		"""

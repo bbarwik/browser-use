@@ -1,3 +1,4 @@
+"""AWS Bedrock general chat model implementation."""
 import json
 from dataclasses import dataclass
 from os import getenv
@@ -20,19 +21,61 @@ T = TypeVar('T', bound=BaseModel)
 
 @dataclass
 class ChatAWSBedrock(BaseChatModel):
-	"""
-	AWS Bedrock chat model supporting multiple providers (Anthropic, Meta, etc.).
-
-	This class provides access to various models via AWS Bedrock,
-	supporting both text generation and structured output via tool calling.
-
-	To use this model, you need to either:
-	1. Set the following environment variables:
-	   - AWS_ACCESS_KEY_ID
-	   - AWS_SECRET_ACCESS_KEY
-	   - AWS_REGION
-	2. Or provide a boto3 Session object
-	3. Or use AWS SSO authentication
+	"""AWS Bedrock chat model integration for browser automation.
+	
+	@public
+	
+	Provides access to multiple foundation models through AWS Bedrock including
+	Anthropic Claude, Meta Llama, Cohere Command, and Amazon Titan models.
+	Offers enterprise-grade security, compliance, and serverless scaling.
+	
+	Constructor Parameters:
+		model: Bedrock model ID (default: "anthropic.claude-3-5-sonnet-20240620-v1:0")
+			- Anthropic: "anthropic.claude-3-5-sonnet-20240620-v1:0"
+			- Meta: "meta.llama3-2-90b-instruct-v1:0"
+			- Cohere: "cohere.command-r-plus-v1:0"
+			- Amazon: "amazon.titan-text-premier-v1:0"
+		max_tokens: Maximum tokens in response (default: 4096)
+		temperature: Sampling temperature 0-1
+		top_p: Nucleus sampling threshold
+		seed: Random seed for deterministic outputs
+		stop_sequences: Custom stop sequences
+		
+		AWS Authentication (in order of preference):
+		1. session: Pre-configured boto3 Session object
+		2. aws_sso_auth: Use AWS SSO (set to True)
+		3. IAM Role: Automatic when running on EC2/Lambda/ECS
+		4. Environment variables:
+			- AWS_ACCESS_KEY_ID
+			- AWS_SECRET_ACCESS_KEY
+			- AWS_REGION or AWS_DEFAULT_REGION
+		5. Constructor parameters:
+			- aws_access_key_id
+			- aws_secret_access_key
+			- aws_region
+		
+		request_params: Additional Bedrock request parameters
+	
+	IAM Authentication Best Practice:
+		When running on AWS infrastructure (EC2, Lambda, ECS), prefer IAM roles
+		over explicit credentials. The SDK automatically uses the instance role:
+		>>> llm = ChatAWSBedrock(
+		...     model="anthropic.claude-3-5-sonnet-20240620-v1:0",
+		...     aws_region="us-east-1"  # Only region needed with IAM role
+		... )
+	
+	Regions:
+		Bedrock is available in: us-east-1, us-west-2, eu-west-1, eu-central-1,
+		ap-northeast-1, ap-southeast-2, and others. Check AWS docs for model availability.
+	
+	Example:
+		>>> # Using environment variables
+		>>> llm = ChatAWSBedrock(
+		...     model="anthropic.claude-3-5-sonnet-20240620-v1:0",
+		...     aws_region="us-east-1",
+		...     max_tokens=4096,
+		... )
+		>>> agent = Agent(task="Enterprise web automation", llm=llm)
 	"""
 
 	# Model configuration
@@ -161,8 +204,7 @@ class ChatAWSBedrock(BaseChatModel):
 	async def ainvoke(
 		self, messages: list[BaseMessage], output_format: type[T] | None = None
 	) -> ChatInvokeCompletion[T] | ChatInvokeCompletion[str]:
-		"""
-		Invoke the AWS Bedrock model with the given messages.
+		"""Invoke the AWS Bedrock model with the given messages.
 
 		Args:
 			messages: List of chat messages

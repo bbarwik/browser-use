@@ -1,3 +1,4 @@
+"""Core agent service implementation."""
 import asyncio
 import gc
 import inspect
@@ -78,8 +79,21 @@ logger = logging.getLogger(__name__)
 
 
 def log_response(response: AgentOutput, registry=None, logger=None) -> None:
-	"""Utility function to log the model's response."""
-
+	"""Log the model's response with colored output.
+	
+	Logs different components of the agent's response with appropriate formatting
+	and color coding. Success evaluations are shown in green, failures in red,
+	and next goals in blue.
+	
+	Args:
+		response: The agent's output containing current state and actions.
+		registry: Optional registry for action lookup (currently unused).
+		logger: Optional logger instance. If None, uses module logger.
+	
+	Note:
+		This is an internal utility function for formatting agent outputs
+		in the console with ANSI color codes.
+	"""
 	# Use module logger if no logger provided
 	if logger is None:
 		logger = logging.getLogger(__name__)
@@ -121,9 +135,174 @@ Context = TypeVar('Context')
 
 
 AgentHookFunc = Callable[['Agent'], Awaitable[None]]
+"""Type alias for agent lifecycle hook functions.
+
+Defines the signature for callbacks that can be registered with the agent's
+`on_step_start` and `on_step_end` parameters in the `run()` method. These
+hooks allow inspection and modification of the agent's state during execution.
+
+Type Signature:
+	async def hook(agent: Agent) -> None
+
+Parameters:
+	agent: The Agent instance, providing access to its state, history, and
+		   methods. The agent can be inspected or modified within the hook.
+
+Returns:
+	None (async function must complete without return value)
+
+Example:
+	>>> async def log_step(agent: Agent) -> None:
+	...     print(f"Step {len(agent.history)}: {agent.state.next_goal}")
+	...     if "error" in agent.state.next_goal.lower():
+	...         # Can modify agent state to influence next actions
+	...         agent.state.next_goal = "Recover from error"
+	>>> 
+	>>> history = await agent.run(on_step_start=log_step)
+
+Note:
+	Hooks can short-circuit execution by raising exceptions or modifying
+	the agent's state. Use with caution as this can disrupt normal flow.
+"""
 
 
 class Agent(Generic[Context, AgentStructuredOutput]):
+	"""Main AI agent for browser automation tasks.
+	
+	@public
+	
+	The Agent class is the primary interface for browser automation using LLMs.
+	It coordinates between the browser session, LLM, and tools to execute complex
+	web automation tasks. The agent maintains state across interactions, manages
+	conversation history, and handles retries on failures.
+	
+	The agent uses a step-based execution model where each step involves:
+		1. Capturing the current browser state (DOM, screenshot, URL)
+		2. Building context with history, memory, and current state
+		3. Sending context to the LLM for decision making
+		4. Validating and executing the LLM's chosen actions
+		5. Processing action results (errors, extracted content, completion)
+		6. Updating internal state, memory, and history
+		7. Checking stop conditions (is_done, max_steps, failures)
+		
+	Retry Mechanism:
+		The agent automatically retries on failures up to max_failures times
+		(default: 3) with exponential backoff. Rate limit errors trigger
+		automatic backoff. Consecutive failures increment a counter that
+		resets on successful actions.
+	
+	Type Parameters:
+		Context: Type of custom context data passed to tools
+		AgentStructuredOutput: Type of structured output when using output schemas
+	
+	Constructor Args:
+		task: Description of the task to perform. Should be clear and specific.
+		llm: Language model for decision making. Defaults to GPT-4 mini.
+		browser_profile: Browser profile configuration. If None, uses default profile.
+		browser_session: Existing browser session to use. Creates new if None.
+		browser: Alias for browser_session (preferred parameter name).
+		tools: Tool registry with custom actions. Creates default if None.
+		controller: Alias for tools parameter.
+		sensitive_data: Credentials to use during automation. Can be:
+			- Simple dict: {"username": "user", "password": "pass"}
+			- Domain-specific: {"github.com": {"username": "..."}}
+		initial_actions: List of actions to execute before starting the task.
+		output_model_schema: Pydantic model for structured output extraction.
+		use_vision: Whether to include screenshots in LLM context (default: True).
+		save_conversation_path: Path to save conversation history.
+		max_failures: Maximum retry attempts on step failure (default: 3).
+		override_system_message: Replace default system prompt entirely.
+		extend_system_message: Append to default system prompt.
+		generate_gif: Generate animated GIF of browser actions.
+		available_file_paths: List of file paths agent can access.
+		include_attributes: HTML attributes to include in DOM (default: minimal).
+		max_actions_per_step: Maximum actions per LLM call (default: 10).
+		use_thinking: Enable thinking/reasoning in prompts (default: True).
+		flash_mode: Use faster, less thorough mode (default: False).
+		max_history_items: Limit conversation history size.
+		page_extraction_llm: Separate LLM for page content extraction.
+		calculate_cost: Track token usage costs (default: False).
+		vision_detail_level: Image quality for vision ('auto', 'low', 'high').
+		llm_timeout: Timeout for LLM calls in seconds (default: 90).
+		step_timeout: Timeout for step execution in seconds (default: 120).
+		directly_open_url: Auto-navigate to URLs in task (default: True).
+		include_recent_events: Include recent browser events in context (default: False).
+	
+	Attributes:
+		id: Unique identifier for this agent instance
+		task_id: Alias for id, used for task tracking
+		session_id: Unique session identifier
+		task: The task description provided to the agent
+		llm: The language model used for decision making
+		browser_session: The browser session for web interaction
+		tools: Tool registry with available actions
+		state: Current agent state including memory and goals
+		history: Complete history of agent actions and responses
+		settings: Configuration settings for the agent
+		
+	Internal State Components (agent.state):
+		memory: Accumulated knowledge from the task execution
+		current_goal: What the agent is trying to achieve now
+		last_result: Results from the most recent action
+		n_steps: Number of steps executed so far
+		consecutive_failures: Failed attempts counter (resets on success)
+		paused/stopped: Execution control flags
+		message_manager_state: Conversation history and context
+		file_system_state: Active file operations and paths
+		
+	Example:
+		>>> from browser_use import Agent, BrowserSession
+		>>> from browser_use.llm.openai import ChatOpenAI
+		>>> 
+		>>> async def automate_search():
+		...     browser = BrowserSession()
+		...     llm = ChatOpenAI(model="gpt-4")
+		...     agent = Agent(
+		...         task="Search for Python documentation",
+		...         llm=llm,
+		...         browser=browser
+		...     )
+		...     result = await agent.run()
+		...     return result
+		
+		>>> # With structured output
+		>>> from pydantic import BaseModel
+		>>> class SearchResult(BaseModel):
+		...     title: str
+		...     url: str
+		...     summary: str
+		>>> 
+		>>> agent = Agent(
+		...     task="Extract search results",
+		...     output_model_schema=SearchResult
+		... )
+		>>> history = await agent.run()
+		>>> 
+		>>> # Access structured output
+		>>> if history.structured_output:
+		...     result: SearchResult = history.structured_output
+		...     print(f"Title: {result.title}")
+		...     print(f"URL: {result.url}")
+	
+	Security:
+		IMPORTANT: Always follow these security best practices:
+		- Use allowed_domains to restrict where the agent can navigate
+		- Store sensitive_data only for domains you trust
+		- Enable headless=False during development to monitor agent actions
+		- Never expose API keys or credentials in logs or screenshots
+		- Use domain-specific credentials: {"github.com": {"token": "..."}}
+		- Consider network isolation for sensitive automation tasks
+		- Regularly audit agent history and extracted content
+		
+	Note:
+		The agent requires an async context and should be used with
+		`async with` or proper cleanup via the `close()` method.
+	
+	See Also:
+		BrowserSession: Browser control and session management
+		Tools: Tool registry for available actions
+		AgentHistory: History tracking for agent actions
+	"""
 	@time_execution_sync('--init')
 	def __init__(
 		self,
@@ -181,6 +360,80 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		include_recent_events: bool = False,
 		**kwargs,
 	):
+		"""Initialize a new Agent instance.
+		
+		Creates and configures an agent for browser automation tasks. The agent
+		coordinates between the LLM, browser session, and tools to execute the
+		specified task.
+		
+		Args:
+			task: Description of the task to perform. Should be clear and specific.
+			llm: Language model for decision making. Defaults to GPT-4 mini.
+			browser_profile: Browser profile configuration. If None, uses default profile.
+			browser_session: Existing browser session to use. Creates new if None.
+			browser: Alias for browser_session (preferred parameter name).
+			tools: Tool registry with custom actions. Creates default if None.
+			controller: Alias for tools parameter.
+			
+			sensitive_data: Credentials to use during automation. Can be:
+				- Simple dict: {"username": "user", "password": "pass"}
+				- Domain-specific: {"github.com": {"username": "..."}}
+			initial_actions: List of actions to execute before starting the task.
+			
+			register_new_step_callback: Callback invoked after each step.
+			register_done_callback: Callback invoked when task completes.
+			register_external_agent_status_raise_error_callback: Check external status.
+			
+			output_model_schema: Pydantic model for structured output extraction.
+			use_vision: Whether to include screenshots in LLM context (default: True).
+			save_conversation_path: Path to save conversation history.
+			save_conversation_path_encoding: Encoding for conversation file (default: 'utf-8').
+			max_failures: Maximum retry attempts on step failure (default: 3).
+			override_system_message: Replace default system prompt entirely.
+			extend_system_message: Append to default system prompt.
+			generate_gif: Generate animated GIF of browser actions.
+			available_file_paths: List of file paths agent can access.
+			include_attributes: HTML attributes to include in DOM (default: minimal).
+			max_actions_per_step: Maximum actions per LLM call (default: 10).
+			use_thinking: Enable thinking/reasoning in prompts (default: True).
+			flash_mode: Use faster, less thorough mode (default: False).
+			max_history_items: Limit conversation history size.
+			page_extraction_llm: Separate LLM for page content extraction.
+			injected_agent_state: Restore from previous agent state.
+			source: Source identifier for telemetry.
+			file_system_path: Path for file system operations.
+			task_id: Custom task identifier. Auto-generated if None.
+			cloud_sync: Cloud synchronization service.
+			calculate_cost: Track token usage costs (default: False).
+			display_files_in_done_text: Show file paths in completion (default: True).
+			include_tool_call_examples: Add examples in prompts (default: False).
+			vision_detail_level: Image quality for vision ('auto', 'low', 'high').
+			llm_timeout: Timeout for LLM calls in seconds (default: 90).
+			step_timeout: Timeout for step execution in seconds (default: 120).
+			directly_open_url: Auto-navigate to URLs in task (default: True).
+			include_recent_events: Include recent browser events in context (default: False).
+			**kwargs: Additional parameters (for backwards compatibility).
+		
+		Raises:
+			ValueError: If both browser and browser_session are provided.
+			ValueError: If file_system_state and file_system_path conflict.
+		
+		Example:
+			>>> agent = Agent(
+			...     task="Login and download report",
+			...     sensitive_data={"username": "user", "password": "pass"},
+			...     use_vision=True,
+			...     save_conversation_path="./logs/conversation.txt"
+			... )
+		
+		Warning:
+			When using sensitive_data, always configure allowed_domains in
+			BrowserProfile to prevent credential leakage to untrusted sites.
+		
+		Note:
+			The agent automatically handles browser lifecycle, but you should
+			use async context managers or call close() for proper cleanup.
+		"""
 		if page_extraction_llm is None:
 			page_extraction_llm = llm
 		if available_file_paths is None:
@@ -420,8 +673,14 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 
 	@property
 	def logger(self) -> logging.Logger:
-		"""Get instance-specific logger with task ID in the name"""
-
+		"""Get instance-specific logger with contextual identifiers.
+		
+		Returns a logger that includes the agent's task ID, browser session ID,
+		and current target ID in its name for better log correlation.
+		
+		Returns:
+			Logger instance with contextual naming.
+		"""
 		_browser_session_id = self.browser_session.id if self.browser_session else '----'
 		_current_target_id = (
 			self.browser_session.agent_focus.target_id[-2:]
@@ -432,6 +691,14 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 
 	@property
 	def browser_profile(self) -> BrowserProfile:
+		"""Get the browser profile configuration.
+		
+		Returns:
+			The browser profile used by the current session.
+		
+		Raises:
+			AssertionError: If browser session is not initialized.
+		"""
 		assert self.browser_session is not None, 'BrowserSession is not set up'
 		return self.browser_session.browser_profile
 
@@ -575,6 +842,35 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 			self.DoneAgentOutput = AgentOutput.type_with_custom_actions_no_thinking(self.DoneActionModel)
 
 	def add_new_task(self, new_task: str) -> None:
+		"""Add a follow-up task for the agent to execute.
+		
+		@public
+		
+		Queues a new task to be executed after the current task completes.
+		Useful for chaining multiple tasks or adding tasks dynamically.
+		
+		Args:
+			new_task: Description of the follow-up task to execute.
+		
+		Example:
+			>>> agent = Agent(task="Login to website")
+			>>> agent.add_new_task("Download the report")
+			>>> agent.add_new_task("Logout")
+			>>> 
+			>>> # Tasks are processed sequentially
+			>>> # Each call to add_new_task extends the current session
+			>>> result = await agent.run(max_steps=50)
+			>>> 
+			>>> # Or chain tasks manually
+			>>> result1 = await agent.run()  # Executes "Login to website"
+			>>> agent.add_new_task("Download report")
+			>>> result2 = await agent.run()  # Continues with "Download report"
+		
+		Note:
+			run() executes ONE task at a time and returns. To process multiple
+			queued tasks, use a loop. The agent maintains context (cookies,
+			session state) between tasks.
+		"""
 		"""Add a new task to the agent, keeping the same task_id as tasks are continuous"""
 		# Simply delegate to message manager - no need for new task_id or events
 		# The task continues with new instructions, it doesn't end and start a new one
@@ -591,7 +887,6 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 	@observe_debug(ignore_input=True, ignore_output=True, name='_raise_if_stopped_or_paused')
 	async def _raise_if_stopped_or_paused(self) -> None:
 		"""Utility function that raises an InterruptedError if the agent is stopped or paused."""
-
 		if self.register_external_agent_status_raise_error_callback:
 			if await self.register_external_agent_status_raise_error_callback():
 				raise InterruptedError
@@ -603,6 +898,27 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 	@observe(name='agent.step', ignore_output=True, ignore_input=True)
 	@time_execution_async('--step')
 	async def step(self, step_info: AgentStepInfo | None = None) -> None:
+		"""Execute a single step of the agent's task.
+		
+		Performs one iteration of the agent's decision-action cycle:
+		1. Capture current browser state
+		2. Get LLM to decide on actions
+		3. Execute chosen actions
+		4. Update state and history
+		
+		Args:
+			step_info: Optional step configuration including:
+					  - output: Expected output type
+					  - include_thinking: Override thinking setting
+		
+		Raises:
+			AgentError: If step execution fails after retries.
+			TimeoutError: If step exceeds configured timeout.
+		
+		Note:
+			This is typically called internally by run(), but can be
+			used for manual step-by-step execution.
+		"""
 		"""Execute one step of the task"""
 		# Initialize timing first, before any exceptions can occur
 		self.step_start_time = time.time()
@@ -758,7 +1074,6 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 
 	async def _handle_step_error(self, error: Exception) -> None:
 		"""Handle all types of errors that can occur during a step"""
-
 		# Handle all other exceptions
 		include_trace = self.logger.isEnabledFor(logging.DEBUG)
 		error_msg = AgentError.format_error(error, include_trace=include_trace)
@@ -915,7 +1230,6 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		metadata: StepMetadata | None = None,
 	) -> None:
 		"""Create and store history item"""
-
 		if model_output:
 			interacted_elements = AgentHistory.get_interacted_element(model_output, browser_state_summary.dom_state.selector_map)
 		else:
@@ -963,7 +1277,6 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 	@observe_debug(ignore_input=True, ignore_output=True, name='get_model_output')
 	async def get_model_output(self, input_messages: list[BaseMessage]) -> AgentOutput:
 		"""Get next action from LLM based on current state"""
-
 		try:
 			response = await self.llm.ainvoke(input_messages, output_format=self.AgentOutput)
 			parsed = response.completion
@@ -1064,7 +1377,6 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 
 	def _log_agent_event(self, max_steps: int, agent_run_error: str | None = None) -> None:
 		"""Sent the agent event for this run to telemetry"""
-
 		token_summary = self.token_cost_service.get_usage_tokens_for_model(self.llm.model)
 
 		# Prepare action_history data correctly
@@ -1177,8 +1489,71 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		on_step_start: AgentHookFunc | None = None,
 		on_step_end: AgentHookFunc | None = None,
 	) -> AgentHistoryList[AgentStructuredOutput]:
-		"""Execute the task with maximum number of steps"""
-
+		"""Execute the agent's task until completion or maximum steps.
+		
+		@public
+		
+		Main execution method that runs the agent through multiple steps to
+		complete the assigned task. Each step involves capturing browser state,
+		deciding on actions, executing them, and updating history.
+		
+		The agent will continue until:
+		- The task is marked as complete (done action)
+		- Maximum steps are reached
+		- An unrecoverable error occurs
+		- The user interrupts execution (Ctrl+C)
+		
+		Browser Lifecycle:
+			After run() completes, the browser session is automatically closed
+			UNLESS browser_profile.keep_alive=True is set. The cleanup happens
+			in the finally block via self.close():
+			
+			- If keep_alive=False/None (default): Browser is killed
+			- If keep_alive=True: Browser remains active for manual use
+			
+			To keep browser alive for post-run interactions:
+				>>> profile = BrowserProfile(keep_alive=True)
+				>>> agent = Agent(browser=Browser(profile))
+				>>> await agent.run()
+				>>> # Browser is still alive here
+				>>> await agent.browser_session.get_browser_state_summary()
+				>>> await agent.browser_session.stop()  # Manual cleanup
+		
+		Args:
+			max_steps: Maximum number of steps to execute (default: 100).
+					  Prevents infinite loops.
+			on_step_start: Optional async callback before each step.
+			on_step_end: Optional async callback after each step.
+		
+		Returns:
+			AgentHistoryList containing:
+			- history: List of all steps taken
+			- usage: Token usage statistics (if calculate_cost=True)
+			- result: Structured output (if output_model_schema provided)
+		
+		Raises:
+			Exception: Any unhandled exceptions during execution.
+		
+		Example:
+			>>> async def main():
+			...     agent = Agent(task="Search for Python docs")
+			...     result = await agent.run(max_steps=50)
+			...     print(f"Completed in {len(result.history)} steps")
+			...     if result.result:
+			...         print(f"Extracted data: {result.result}")
+		
+		Note:
+			The agent automatically handles:
+			- Browser lifecycle management (see Browser Lifecycle above)
+			- Error recovery and retries
+			- History tracking and GIF generation
+			- Conversation saving (if configured)
+			- Telemetry and cloud sync (if enabled)
+		
+		Warning:
+			Always set appropriate max_steps to prevent runaway execution.
+			Use Ctrl+C to pause/resume or double Ctrl+C to force exit.
+		"""
 		loop = asyncio.get_event_loop()
 		agent_run_error: str | None = None  # Initialize error tracking variable
 		self._force_exit_telemetry_logged = False  # ADDED: Flag for custom telemetry on force exit
@@ -1188,6 +1563,7 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 
 		# Define the custom exit callback function for second CTRL+C
 		def on_force_exit_log_telemetry():
+			"""Log telemetry data when agent is force-exited via SIGINT."""
 			self._log_agent_event(max_steps=max_steps, agent_run_error='SIGINT: Cancelled by user')
 			# NEW: Call the flush method on the telemetry instance
 			if hasattr(self, 'telemetry') and self.telemetry:
@@ -1494,6 +1870,7 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 				new_target_hash = new_target.parent_branch_hash() if new_target else None
 
 				def get_remaining_actions_str(actions: list[ActionModel], index: int) -> str:
+					"""Get string representation of remaining actions from given index."""
 					remaining_actions = []
 					for remaining_action in actions[index:]:
 						action_data = remaining_action.model_dump(exclude_unset=True)
@@ -1600,8 +1977,7 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		skip_failures: bool = True,
 		delay_between_actions: float = 2.0,
 	) -> list[ActionResult]:
-		"""
-		Rerun a saved history of actions with error handling and retry logic.
+		"""Rerun a saved history of actions with error handling and retry logic.
 
 		Args:
 		                history: The history to replay
@@ -1684,8 +2060,7 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		action: ActionModel,  # Type this properly based on your action model
 		browser_state_summary: BrowserStateSummary,
 	) -> ActionModel | None:
-		"""
-		Update action indices based on current page state.
+		"""Update action indices based on current page state.
 		Returns updated action or None if element cannot be found.
 		"""
 		if not historical_element or not browser_state_summary.dom_state.selector_map:
@@ -1713,12 +2088,41 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		return action
 
 	async def load_and_rerun(self, history_file: str | Path | None = None, **kwargs) -> list[ActionResult]:
-		"""
-		Load history from file and rerun it.
+		"""Load history from file and rerun it.
+		
+		@public
+		
+		Loads a previously saved agent history from a JSON file and reruns the
+		actions. Useful for debugging, testing, or reproducing previous runs.
 
 		Args:
-		                history_file: Path to the history file
-		                **kwargs: Additional arguments passed to rerun_history
+			history_file: Path to the history file (default: "AgentHistory.json")
+			**kwargs: Additional arguments passed to rerun_history:
+				- skip_failures: Whether to continue on action failures
+				- delay_between_actions: Seconds to wait between actions
+				
+		Returns:
+			List of ActionResult objects from the rerun
+			
+		File Format:
+			The history file should be a JSON file created by save_history(),
+			containing the full agent history with actions, thoughts, and results.
+			
+		Limitations:
+			- Browser state must match original conditions for accurate replay
+			- Dynamic content (timestamps, random IDs) may cause differences
+			- Authentication state must be restored separately
+			
+		Example:
+			>>> # Rerun a previous session
+			>>> results = await agent.load_and_rerun("session_20240115.json")
+			>>> 
+			>>> # Rerun with modifications
+			>>> results = await agent.load_and_rerun(
+			...     "debug_session.json",
+			...     skip_failures=True,
+			...     delay_between_actions=1.0
+			... )
 		"""
 		if not history_file:
 			history_file = 'AgentHistory.json'
@@ -1726,15 +2130,51 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		return await self.rerun_history(history, **kwargs)
 
 	def save_history(self, file_path: str | Path | None = None) -> None:
+		"""Save agent history to a JSON file.
+		
+		@public
+		
+		Saves the complete agent history including all steps, actions,
+		and responses to a JSON file for later analysis or replay.
+		
+		Args:
+			file_path: Path to save history. If None, uses default location
+					  in agent directory with timestamp.
+		
+		Example:
+			>>> agent.save_history("./logs/agent_history.json")
+			>>> # Or use default location
+			>>> agent.save_history()
+		
+		See Also:
+			load_and_rerun: Load and replay saved history
+		"""
 		"""Save the history to a file"""
 		if not file_path:
 			file_path = 'AgentHistory.json'
 		self.history.save_to_file(file_path)
 
 	async def wait_until_resumed(self):
+		"""Wait until the agent is resumed from pause."""
 		await self._external_pause_event.wait()
 
 	def pause(self) -> None:
+		"""Pause agent execution.
+		
+		@public
+		
+		Pauses the agent's execution at the next safe point. The agent
+		will complete any currently executing action before pausing.
+		
+		Example:
+			>>> agent.pause()
+			>>> # Agent will pause after current action
+			>>> agent.resume()  # Continue execution
+		
+		See Also:
+			resume: Resume paused execution
+			stop: Permanently stop execution
+		"""
 		"""Pause the agent before the next step"""
 		print(
 			'\n\n⏸️  Got [Ctrl+C], paused the agent and left the browser open.\n\tPress [Enter] to resume or [Ctrl+C] again to quit.'
@@ -1748,6 +2188,22 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		# No need to duplicate the code here
 
 	def resume(self) -> None:
+		"""Resume paused agent execution.
+		
+		@public
+		
+		Resumes agent execution after being paused. Has no effect if
+		the agent is not currently paused.
+		
+		Example:
+			>>> agent.pause()
+			>>> await asyncio.sleep(5)  # Wait 5 seconds
+			>>> agent.resume()  # Continue execution
+		
+		See Also:
+			pause: Pause execution
+			stop: Permanently stop execution
+		"""
 		"""Resume the agent"""
 		print('----------------------------------------------------------------------')
 		print('▶️  Got Enter, resuming agent execution where it left off...\n')
@@ -1760,6 +2216,22 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		# through its reset() method when called from run()
 
 	def stop(self) -> None:
+		"""Stop agent execution permanently.
+		
+		@public
+		
+		Sets a flag to stop the agent at the next safe point. Unlike pause(),
+		this permanently stops execution and cannot be resumed.
+		
+		Example:
+			>>> agent.stop()
+			>>> # Agent will stop after current action
+			>>> # Cannot be resumed
+		
+		See Also:
+			pause: Temporarily pause execution
+			resume: Resume paused execution
+		"""
 		"""Stop the agent"""
 		self.logger.info('⏹️ Agent stopping')
 		self.state.stopped = True
@@ -1789,11 +2261,9 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		return converted_actions
 
 	def _verify_and_setup_llm(self):
-		"""
-		Verify that the LLM API keys are setup and the LLM API is responding properly.
+		"""Verify that the LLM API keys are setup and the LLM API is responding properly.
 		Also handles tool calling method detection if in auto mode.
 		"""
-
 		# Skip verification if already done
 		if getattr(self.llm, '_verified_api_keys', None) is True or CONFIG.SKIP_LLM_API_KEY_VERIFICATION:
 			setattr(self.llm, '_verified_api_keys', True)
@@ -1804,7 +2274,48 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		return self._message_manager
 
 	async def close(self):
-		"""Close all resources"""
+		"""Clean up agent resources and conditionally close browser session.
+		
+		@public
+		
+		Properly closes agent resources and browser session based on keep_alive setting.
+		This method is automatically called at the end of Agent.run() in the finally block.
+		
+		Browser Behavior:
+			- If browser_profile.keep_alive=False/None (default):
+			  Browser session is killed, closing all tabs and the browser process
+			- If browser_profile.keep_alive=True:
+			  Browser session remains active for manual operations
+			  You must manually call browser_session.stop() or .kill() later
+		
+		Resources Always Cleaned:
+			- File system handlers
+			- Telemetry and logs flushed
+			- Garbage collection triggered
+		
+		This method should be called when done with the agent, either
+		explicitly or via async context manager.
+		
+		Example:
+			>>> # Default behavior - browser closes automatically
+			>>> agent = Agent(task="...")
+			>>> await agent.run()  # Browser killed in finally block
+			
+			>>> # Keep browser alive for manual operations
+			>>> profile = BrowserProfile(keep_alive=True)
+			>>> agent = Agent(task="...", browser=Browser(profile))
+			>>> await agent.run()  # Browser stays alive
+			>>> # Do manual operations...
+			>>> await agent.browser_session.stop()  # Manual cleanup
+			
+			>>> # Using async context manager (always closes)
+			>>> async with Agent(task="...") as agent:
+			...     await agent.run()
+		
+		Note:
+			Always call close() to prevent resource leaks. If keep_alive=True,
+			remember to manually stop the browser session when done.
+		"""
 		try:
 			# Only close browser if keep_alive is False (or not set)
 			if self.browser_session is not None:
@@ -1937,7 +2448,43 @@ class Agent(Generic[Context, AgentStructuredOutput]):
 		on_step_start: AgentHookFunc | None = None,
 		on_step_end: AgentHookFunc | None = None,
 	) -> AgentHistoryList[AgentStructuredOutput]:
-		"""Synchronous wrapper around the async run method for easier usage without asyncio."""
+		"""Synchronous wrapper around the async run method for easier usage without asyncio.
+		
+		@public
+		
+		A synchronous version of run() for use in non-async contexts. Internally
+		uses asyncio.run() to execute the async run method.
+		
+		Args:
+			max_steps: Maximum number of steps to execute
+			on_step_start: Optional callback before each step
+			on_step_end: Optional callback after each step
+			
+		Returns:
+			AgentHistoryList containing the complete execution history
+			
+		Example:
+			>>> # Simple synchronous script
+			>>> from browser_use import Agent, BrowserSession, ChatOpenAI
+			>>> 
+			>>> # No async/await needed
+			>>> browser = BrowserSession(headless=True)
+			>>> llm = ChatOpenAI(model="gpt-4")
+			>>> agent = Agent(
+			...     task="Find the latest Python version number",
+			...     llm=llm,
+			...     browser=browser
+			... )
+			>>> 
+			>>> # Run synchronously - perfect for scripts and notebooks
+			>>> history = agent.run_sync(max_steps=10)
+			>>> 
+			>>> # Process results
+			>>> if history.is_successful():
+			...     print(f"Result: {history.final_result()}")
+			>>> else:
+			...     print(f"Failed: {history.errors()}")
+		"""
 		import asyncio
 
 		return asyncio.run(self.run(max_steps=max_steps, on_step_start=on_step_start, on_step_end=on_step_end))

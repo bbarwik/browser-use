@@ -1,3 +1,4 @@
+"""Token cost and usage data models."""
 from datetime import datetime
 from typing import Any, TypeVar
 
@@ -91,7 +92,38 @@ class ModelUsageTokens(BaseModel):
 
 
 class UsageSummary(BaseModel):
-	"""Summary of token usage and costs"""
+	"""Summary of token usage and costs for agent execution.
+	
+	Tracks comprehensive token usage and associated costs across all LLM calls
+	during an agent's execution. Available in AgentHistoryList.usage when
+	calculate_cost=True is set on the Agent.
+	
+	Fields:
+		total_prompt_tokens: Total input tokens sent to LLM
+		total_prompt_cost: Cost of prompt tokens in USD
+		total_prompt_cached_tokens: Cached prompt tokens (Anthropic cache)
+		total_prompt_cached_cost: Cost of cached tokens (discounted)
+		total_completion_tokens: Total output tokens from LLM
+		total_completion_cost: Cost of completion tokens in USD
+		total_tokens: Combined prompt + completion tokens
+		total_cost: Total cost in USD
+		entry_count: Number of LLM calls made
+		by_model: Breakdown by model name (dict[str, ModelUsageStats])
+	
+	Example:
+		>>> agent = Agent(task="Search", calculate_cost=True)
+		>>> history = await agent.run()
+		>>> if history.usage:
+		...     print(f"Total cost: ${history.usage.total_cost:.4f}")
+		...     print(f"Tokens used: {history.usage.total_tokens}")
+		...     for model, stats in history.usage.by_model.items():
+		...         print(f"{model}: ${stats.total_cost:.4f}")
+	
+	Note:
+		Costs are calculated based on current provider pricing.
+		Non-OpenAI providers may not report accurate token counts.
+		Enable with calculate_cost=True on Agent initialization.
+	"""
 
 	total_prompt_tokens: int
 	total_prompt_cost: float

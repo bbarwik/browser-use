@@ -85,6 +85,7 @@ class BaseWatchdog(BaseModel):
 		# Capture handler by value to avoid closure issues
 		def make_unique_handler(actual_handler):
 			async def unique_handler(event):
+				"""Handle events with unique identifier and logging."""
 				# just for debug logging, not used for anything else
 				parent_event = event_bus.event_history.get(event.event_parent_id) if event.event_parent_id else None
 				grandparent_event = (
@@ -239,7 +240,6 @@ class BaseWatchdog(BaseModel):
 
 	def __del__(self) -> None:
 		"""Clean up any running tasks during garbage collection."""
-
 		# A BIT OF MAGIC: Cancel any private attributes that look like asyncio tasks
 		try:
 			for attr_name in dir(self):

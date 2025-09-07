@@ -1,3 +1,4 @@
+"""Telemetry data models and views."""
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
@@ -8,6 +9,7 @@ from browser_use.config import is_running_in_docker
 
 @dataclass
 class BaseTelemetryEvent(ABC):
+	"""Base class for telemetry events."""
 	@property
 	@abstractmethod
 	def name(self) -> str:
@@ -23,6 +25,7 @@ class BaseTelemetryEvent(ABC):
 
 @dataclass
 class AgentTelemetryEvent(BaseTelemetryEvent):
+	"""Telemetry event for agent execution."""
 	# start details
 	task: str
 	model: str

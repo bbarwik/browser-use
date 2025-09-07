@@ -1,6 +1,5 @@
 # @file purpose: Observability module for browser-use that handles optional lmnr integration with debug mode support
-"""
-Observability module for browser-use
+"""Observability module for browser-use
 
 This module provides observability decorators that optionally integrate with lmnr (Laminar) for tracing.
 If lmnr is not installed, it provides no-op wrappers that accept the same parameters.
@@ -30,7 +29,6 @@ F = TypeVar('F', bound=Callable[..., Any])
 # Check if we're in debug mode
 def _is_debug_mode() -> bool:
 	"""Check if we're in debug mode based on environment variables or logging level."""
-
 	lmnr_debug_mode = os.getenv('LMNR_LOGGING_LEVEL', '').lower()
 	if lmnr_debug_mode == 'debug':
 		# logger.info('Debug mode is enabled for observability')
@@ -82,8 +80,9 @@ def observe(
 	span_type: Literal['DEFAULT', 'LLM', 'TOOL'] = 'DEFAULT',
 	**kwargs: Any,
 ) -> Callable[[F], F]:
-	"""
-	Observability decorator that traces function execution when lmnr is available.
+	"""Observability decorator that traces function execution when lmnr is available.
+
+	@public
 
 	This decorator will use lmnr's observe decorator if lmnr is installed,
 	otherwise it will be a no-op that accepts the same parameters.
@@ -93,6 +92,7 @@ def observe(
 	    ignore_input: Whether to ignore function input parameters in tracing
 	    ignore_output: Whether to ignore function output in tracing
 	    metadata: Additional metadata to attach to the span
+	    span_type: Type of span for categorization (DEFAULT, LLM, or TOOL)
 	    **kwargs: Additional parameters passed to lmnr observe
 
 	Returns:
@@ -128,8 +128,7 @@ def observe_debug(
 	span_type: Literal['DEFAULT', 'LLM', 'TOOL'] = 'DEFAULT',
 	**kwargs: Any,
 ) -> Callable[[F], F]:
-	"""
-	Debug-only observability decorator that only traces when in debug mode.
+	"""Debug-only observability decorator that only traces when in debug mode.
 
 	This decorator will use lmnr's observe decorator if both lmnr is installed
 	AND we're in debug mode, otherwise it will be a no-op.
@@ -183,7 +182,25 @@ def is_debug_mode() -> bool:
 
 
 def get_observability_status() -> dict[str, bool]:
-	"""Get the current status of observability features."""
+	"""Get the current status of observability features.
+
+	@public
+
+	Returns a dictionary containing the status of various observability components,
+	useful for debugging and understanding the current observability configuration.
+
+	Returns:
+	    Dict containing:
+	        - lmnr_available: Whether lmnr package is installed and available
+	        - debug_mode: Whether debug mode is currently enabled
+	        - observe_active: Whether the observe decorator is actively tracing
+	        - observe_debug_active: Whether observe_debug is actively tracing
+
+	Example:
+	    status = get_observability_status()
+	    if status['observe_active']:
+	        print("Observability is active")
+	"""
 	return {
 		'lmnr_available': _LMNR_AVAILABLE,
 		'debug_mode': _is_debug_mode(),

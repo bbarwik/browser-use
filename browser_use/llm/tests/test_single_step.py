@@ -1,3 +1,4 @@
+"""Tests for single-step agent functionality."""
 import logging
 import tempfile
 
@@ -22,7 +23,6 @@ logger.setLevel(logging.INFO)
 
 def create_mock_state_message(temp_dir: str):
 	"""Create a mock state message with a single clickable element."""
-
 	# Create a mock DOM element with a single clickable button
 	mock_button = EnhancedDOMTreeNode(
 		node_id=1,

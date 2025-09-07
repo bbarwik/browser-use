@@ -1,4 +1,9 @@
+"""LLM model exception definitions."""
+
+
 class ModelError(Exception):
+	"""Base exception class for LLM model errors."""
+
 	pass
 
 

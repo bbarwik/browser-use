@@ -1,3 +1,4 @@
+"""Browser-use logging configuration and utilities."""
 import logging
 import os
 import sys
@@ -11,8 +12,7 @@ from browser_use.config import CONFIG
 
 
 def addLoggingLevel(levelName, levelNum, methodName=None):
-	"""
-	Comprehensively adds a new logging level to the `logging` module and the
+	"""Comprehensively adds a new logging level to the `logging` module and the
 	currently configured logging class.
 
 	`levelName` becomes an attribute of the `logging` module with the value
@@ -25,7 +25,7 @@ def addLoggingLevel(levelName, levelNum, methodName=None):
 	raise an `AttributeError` if the level name is already an attribute of the
 	`logging` module or if the method name is already present
 
-	Example
+	Example:
 	-------
 	>>> addLoggingLevel('TRACE', logging.DEBUG - 5)
 	>>> logging.getLogger(__name__).setLevel('TRACE')
@@ -49,10 +49,12 @@ def addLoggingLevel(levelName, levelNum, methodName=None):
 	# http://stackoverflow.com/q/2183233/2988730, especially
 	# http://stackoverflow.com/a/13638084/2988730
 	def logForLevel(self, message, *args, **kwargs):
+		"""Log message at the custom level if enabled."""
 		if self.isEnabledFor(levelNum):
 			self._log(levelNum, message, args, **kwargs)
 
 	def logToRoot(message, *args, **kwargs):
+		"""Log message to root logger at the custom level."""
 		logging.log(levelNum, message, *args, **kwargs)
 
 	logging.addLevelName(levelNum, levelName)
@@ -64,12 +66,25 @@ def addLoggingLevel(levelName, levelNum, methodName=None):
 def setup_logging(stream=None, log_level=None, force_setup=False, debug_log_file=None, info_log_file=None):
 	"""Setup logging configuration for browser-use.
 
+	@public
+
+	Configures the application's logging system with colored output, custom log levels,
+	and optional file handlers for debugging.
+
 	Args:
 		stream: Output stream for logs (default: sys.stdout). Can be sys.stderr for MCP mode.
 		log_level: Override log level (default: uses CONFIG.BROWSER_USE_LOGGING_LEVEL)
 		force_setup: Force reconfiguration even if handlers already exist
 		debug_log_file: Path to log file for debug level logs only
 		info_log_file: Path to log file for info level logs only
+		
+	Returns:
+		logging.Logger: The configured browser_use logger.
+		
+	Example:
+		>>> from browser_use.logging_config import setup_logging
+		>>> logger = setup_logging(log_level='debug')
+		>>> logger.info('Browser-use initialized')
 	"""
 	# Try to add RESULT level, but ignore if it already exists
 	try:
@@ -252,6 +267,11 @@ class FIFOHandler(logging.Handler):
 		self.fd = None
 
 	def emit(self, record):
+		"""Emit a log record to the FIFO pipe.
+		
+		Args:
+			record: The LogRecord to emit.
+		"""
 		try:
 			# Open FIFO on first write if not already open
 			if self.fd is None:
@@ -273,6 +293,7 @@ class FIFOHandler(logging.Handler):
 				self.fd = None
 
 	def close(self):
+		"""Close the FIFO file descriptor and clean up resources."""
 		if hasattr(self, 'fd') and self.fd is not None:
 			try:
 				os.close(self.fd)

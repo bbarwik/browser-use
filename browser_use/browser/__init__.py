@@ -1,3 +1,8 @@
+"""Browser-Use browser components module.
+
+This module provides lazy imports for browser session and profile management
+components to improve startup performance and avoid circular dependencies.
+"""
 from typing import TYPE_CHECKING
 
 # Type stubs for lazy imports

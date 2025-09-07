@@ -1,3 +1,4 @@
+"""Tool registry data models and views."""
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -25,7 +26,11 @@ class RegisteredAction(BaseModel):
 	model_config = ConfigDict(arbitrary_types_allowed=True)
 
 	def prompt_description(self) -> str:
-		"""Get a description of the action for the prompt"""
+		"""Get a description of the action for the prompt.
+		
+		Returns:
+			A formatted string describing the action and its parameters.
+		"""
 		skip_keys = ['title']
 		s = f'{self.description}: \n'
 		s += '{' + str(self.name) + ': '
@@ -40,7 +45,33 @@ class RegisteredAction(BaseModel):
 
 
 class ActionModel(BaseModel):
-	"""Base model for dynamically created action models"""
+	"""Base model for dynamically created action models.
+	
+	@public
+	
+	This is the container model that holds any single action to be executed.
+	It's dynamically generated to include all registered actions, where each
+	field represents a different action type. Only one action field should be
+	set (non-None) at a time.
+	
+	The ActionModel is created at runtime based on registered actions and
+	provides a uniform interface for the agent to specify what action to perform.
+	
+	Example:
+		>>> # Click on element with index 5
+		>>> action = ActionModel(click_element_by_index=ClickElementAction(index=5))
+		>>>
+		>>> # Navigate to a URL
+		>>> action = ActionModel(go_to_url=GoToUrlAction(url="https://example.com"))
+		>>>
+		>>> # Input text into element 3
+		>>> action = ActionModel(input_text=InputTextAction(index=3, text="Hello"))
+	
+	Note:
+		The exact fields available depend on which actions are registered
+		with the Tools registry. Use Tools.get_action_model() to get the
+		current ActionModel class with all available actions.
+	"""
 
 	# this will have all the registered actions, e.g.
 	# click_element = param_model = ClickElementParams
@@ -49,7 +80,11 @@ class ActionModel(BaseModel):
 	model_config = ConfigDict(arbitrary_types_allowed=True, extra='forbid')
 
 	def get_index(self) -> int | None:
-		"""Get the index of the action"""
+		"""Get the index parameter from the action if it exists.
+		
+		Returns:
+			The index value if found, None otherwise.
+		"""
 		# {'clicked_element': {'index':5}}
 		params = self.model_dump(exclude_unset=True).values()
 		if not params:
@@ -60,7 +95,11 @@ class ActionModel(BaseModel):
 		return None
 
 	def set_index(self, index: int):
-		"""Overwrite the index of the action"""
+		"""Overwrite the index parameter of the action.
+		
+		Args:
+			index: The new index value to set.
+		"""
 		# Get the action name and params
 		action_data = self.model_dump(exclude_unset=True)
 		action_name = next(iter(action_data.keys()))
@@ -72,14 +111,17 @@ class ActionModel(BaseModel):
 
 
 class ActionRegistry(BaseModel):
-	"""Model representing the action registry"""
+	"""Registry for managing and organizing available actions.
+	
+	Provides functionality for registering actions, filtering by domain,
+	and generating prompt descriptions for the LLM.
+	"""
 
 	actions: dict[str, RegisteredAction] = {}
 
 	@staticmethod
 	def _match_domains(domains: list[str] | None, url: str) -> bool:
-		"""
-		Match a list of domain glob patterns against a URL.
+		"""Match a list of domain glob patterns against a URL.
 
 		Args:
 			domains: A list of domain patterns that can include glob patterns (* wildcard)
@@ -88,7 +130,6 @@ class ActionRegistry(BaseModel):
 		Returns:
 			True if the URL's domain matches the pattern, False otherwise
 		"""
-
 		if domains is None or not url:
 			return True
 
@@ -130,7 +171,11 @@ class ActionRegistry(BaseModel):
 
 
 class SpecialActionParameters(BaseModel):
-	"""Model defining all special parameters that can be injected into actions"""
+	"""Model for special parameters that can be injected into action functions.
+	
+	This model defines context objects and session parameters that can be
+	automatically injected into action functions based on their parameter names.
+	"""
 
 	model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -157,5 +202,9 @@ class SpecialActionParameters(BaseModel):
 
 	@classmethod
 	def get_browser_requiring_params(cls) -> set[str]:
-		"""Get parameter names that require browser_session"""
+		"""Get parameter names that require an active browser session.
+		
+		Returns:
+			Set of parameter names that need browser_session to be available.
+		"""
 		return {'browser_session', 'cdp_client', 'page_url'}

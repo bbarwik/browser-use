@@ -1,5 +1,4 @@
-"""
-Cloud sync service for sending events to the Browser Use cloud.
+"""Cloud sync service for sending events to the Browser Use cloud.
 """
 
 import asyncio

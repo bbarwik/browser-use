@@ -1,5 +1,4 @@
-"""
-Telemetry for Browser Use.
+"""Telemetry for Browser Use.
 """
 
 from typing import TYPE_CHECKING

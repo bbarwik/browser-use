@@ -1,3 +1,4 @@
+"""File system abstraction and utilities for browser-use."""
 import asyncio
 import re
 import shutil
@@ -33,36 +34,76 @@ class BaseFile(BaseModel, ABC):
 		pass
 
 	def write_file_content(self, content: str) -> None:
-		"""Update internal content (formatted)"""
+		"""Update internal content with new content.
+		
+		Args:
+			content: The content to write to the file.
+		"""
 		self.update_content(content)
 
 	def append_file_content(self, content: str) -> None:
-		"""Append content to internal content"""
+		"""Append content to the existing internal content.
+		
+		Args:
+			content: The content to append to the file.
+		"""
 		self.update_content(self.content + content)
 
 	# --- These are shared and implemented here ---
 
 	def update_content(self, content: str) -> None:
+		"""Update the file content.
+		
+		Args:
+			content: The new content for the file.
+		"""
 		self.content = content
 
 	def sync_to_disk_sync(self, path: Path) -> None:
+		"""Synchronously write the file content to disk.
+		
+		Args:
+			path: The directory path where the file should be written.
+		"""
 		file_path = path / self.full_name
 		file_path.write_text(self.content)
 
 	async def sync_to_disk(self, path: Path) -> None:
+		"""Asynchronously write the file content to disk.
+		
+		Args:
+			path: The directory path where the file should be written.
+		"""
 		file_path = path / self.full_name
 		with ThreadPoolExecutor() as executor:
 			await asyncio.get_event_loop().run_in_executor(executor, lambda: file_path.write_text(self.content))
 
 	async def write(self, content: str, path: Path) -> None:
+		"""Write content to the file and sync to disk.
+		
+		Args:
+			content: The content to write.
+			path: The directory path where the file should be written.
+		"""
 		self.write_file_content(content)
 		await self.sync_to_disk(path)
 
 	async def append(self, content: str, path: Path) -> None:
+		"""Append content to the file and sync to disk.
+		
+		Args:
+			content: The content to append.
+			path: The directory path where the file should be written.
+		"""
 		self.append_file_content(content)
 		await self.sync_to_disk(path)
 
 	def read(self) -> str:
+		"""Read the file content.
+		
+		Returns:
+			The file content as a string.
+		"""
 		return self.content
 
 	@property
@@ -118,6 +159,7 @@ class PdfFile(BaseFile):
 		return 'pdf'
 
 	def sync_to_disk_sync(self, path: Path) -> None:
+		"""Synchronously write PDF content to disk using markdown-pdf conversion."""
 		file_path = path / self.full_name
 		try:
 			md_pdf = MarkdownPdf()
@@ -127,6 +169,7 @@ class PdfFile(BaseFile):
 			raise FileSystemError(f"Error: Could not write to file '{self.full_name}'. {str(e)}")
 
 	async def sync_to_disk(self, path: Path) -> None:
+		"""Asynchronously write PDF content to disk using markdown-pdf conversion."""
 		with ThreadPoolExecutor() as executor:
 			await asyncio.get_event_loop().run_in_executor(executor, lambda: self.sync_to_disk_sync(path))
 
@@ -140,7 +183,53 @@ class FileSystemState(BaseModel):
 
 
 class FileSystem:
-	"""Enhanced file system with in-memory storage and multiple file type support"""
+	"""Enhanced file system with in-memory storage and multiple file type support.
+	
+	@public
+	
+	FileSystem provides a sandboxed file management interface for agents to read,
+	write, and manipulate files during browser automation tasks. It maintains an
+	in-memory cache synchronized with disk storage.
+	
+	Key Features:
+		- Sandboxed file operations in a dedicated directory
+		- Support for multiple file types (txt, md, json, csv, pdf)
+		- In-memory caching with disk synchronization
+		- Automatic PDF conversion from markdown
+		- Safe filename validation and parsing
+		
+	Methods Exposed to Tools:
+		read_text(filename): Read file content as string
+		write_text(filename, content): Write content to file
+		append_text(filename, content): Append content to existing file
+		replace_in_file(filename, old_str, new_str): Replace text in file
+		list_files(): Get list of available files
+		available_file_paths: Property returning list of file paths
+		
+	File Availability:
+		Files are available to tools via the available_file_paths property,
+		which is automatically injected into tool functions. Only files in
+		the sandboxed directory are accessible.
+		
+	Supported Extensions:
+		.txt: Plain text files
+		.md: Markdown files
+		.json: JSON data files
+		.csv: CSV spreadsheet files
+		.pdf: PDF documents (write markdown, auto-converts to PDF)
+		
+	Security:
+		- All operations are restricted to the sandboxed directory
+		- Filenames must be alphanumeric with supported extensions
+		- Path traversal attempts are blocked
+		- External file access requires explicit permission
+		
+	Example:
+		>>> fs = FileSystem("./agent_workspace")
+		>>> await fs.write_text("notes.md", "# Meeting Notes")
+		>>> content = await fs.read_text("notes.md")
+		>>> files = fs.list_files()  # Returns ["todo.md", "notes.md"]
+	"""
 
 	def __init__(self, base_dir: str | Path, create_default_files: bool = True):
 		# Handle the Path conversion before calling super().__init__
@@ -442,7 +531,11 @@ class FileSystem:
 		)
 
 	def nuke(self) -> None:
-		"""Delete the file system directory"""
+		"""Delete the file system directory and all its contents.
+		
+		Warning:
+			This permanently deletes all files in the data directory.
+		"""
 		shutil.rmtree(self.data_dir)
 
 	@classmethod

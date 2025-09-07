@@ -1,5 +1,4 @@
-"""
-Simple test for token cost tracking with real LLM calls.
+"""Simple test for token cost tracking with real LLM calls.
 
 Tests ChatOpenAI and ChatGoogle by iteratively generating countries.
 """
@@ -17,7 +16,6 @@ logger.setLevel(logging.INFO)
 
 async def test_iterative_country_generation():
 	"""Test token cost tracking with iterative country generation"""
-
 	# Initialize token cost service
 	tc = TokenCost(include_cost=True)
 

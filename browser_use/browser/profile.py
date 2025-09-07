@@ -1,3 +1,8 @@
+"""Browser profile and configuration management module.
+
+This module defines browser profiles, proxy settings, viewport configurations,
+and other browser session parameters for controlling Chrome/Chromium instances.
+"""
 import sys
 import tempfile
 from collections.abc import Iterable
@@ -177,18 +182,54 @@ CHROME_DEFAULT_ARGS = [
 
 
 class ViewportSize(BaseModel):
-	width: int = Field(ge=0)
-	height: int = Field(ge=0)
+	"""Browser viewport size configuration.
+	
+	@public
+	
+	A class to define browser viewport dimensions, used to set the
+	window size for browser sessions. Supports dictionary-like access
+	via __getitem__ and __setitem__ methods for backwards compatibility.
+	
+	Example:
+		>>> viewport = ViewportSize(width=1920, height=1080)
+		>>> viewport.width
+		1920
+		>>> viewport['height']
+		1080
+		>>> viewport['width'] = 1280
+	"""
+	
+	width: int = Field(ge=0, description="Viewport width in pixels")
+	height: int = Field(ge=0, description="Viewport height in pixels")
 
 	def __getitem__(self, key: str) -> int:
+		"""Get viewport dimension by key.
+		
+		Args:
+			key: The dimension key ('width' or 'height').
+			
+		Returns:
+			The dimension value.
+		"""
 		return dict(self)[key]
 
 	def __setitem__(self, key: str, value: int) -> None:
+		"""Set viewport dimension by key.
+		
+		Args:
+			key: The dimension key ('width' or 'height').
+			value: The dimension value to set.
+		"""
 		setattr(self, key, value)
 
 
 @cache
 def get_display_size() -> ViewportSize | None:
+	"""Get the current display size across different platforms.
+	
+	Returns:
+		ViewportSize with display dimensions, or None if detection fails.
+	"""
 	# macOS
 	try:
 		from AppKit import NSScreen  # type: ignore[import]
@@ -213,7 +254,6 @@ def get_display_size() -> ViewportSize | None:
 
 def get_window_adjustments() -> tuple[int, int]:
 	"""Returns recommended x, y offsets for window positioning"""
-
 	if sys.platform == 'darwin':  # macOS
 		return -4, 24  # macOS has a small title bar, no border
 	elif sys.platform == 'win32':  # Windows
@@ -250,17 +290,76 @@ def validate_cli_arg(arg: str) -> str:
 
 
 class RecordHarContent(str, Enum):
+	"""HAR content recording modes for network capture.
+	
+	@public
+	
+	Controls how HTTP Archive (HAR) content is recorded during browser sessions.
+	Used with BrowserProfile.record_har_content parameter.
+	
+	Values:
+		OMIT: Skip recording response content (only metadata)
+		EMBED: Include response content directly in HAR file
+		ATTACH: Save response content as separate files
+	
+	Example:
+		>>> profile = BrowserProfile(
+		...     record_har_path="./network.har",
+		...     record_har_content=RecordHarContent.EMBED
+		... )
+	"""
 	OMIT = 'omit'
 	EMBED = 'embed'
 	ATTACH = 'attach'
 
 
 class RecordHarMode(str, Enum):
+	"""HAR recording modes for network capture detail level.
+	
+	@public
+	
+	Controls the level of detail in HTTP Archive (HAR) recordings.
+	Used with BrowserProfile.record_har_mode parameter.
+	
+	Values:
+		FULL: Record all network activity with full details
+		MINIMAL: Record only essential network information
+	
+	Example:
+		>>> profile = BrowserProfile(
+		...     record_har_path="./network.har",
+		...     record_har_mode=RecordHarMode.FULL
+		... )
+	"""
 	FULL = 'full'
 	MINIMAL = 'minimal'
 
 
 class BrowserChannel(str, Enum):
+	"""Browser release channels for selecting specific browser versions.
+	
+	@public
+	
+	Enumeration of supported browser channels for Chromium-based browsers.
+	Used with BrowserProfile.channel to specify which browser version to launch.
+	
+	Values:
+		CHROMIUM: Open-source Chromium browser (default)
+		CHROME: Google Chrome stable release
+		CHROME_BETA: Google Chrome beta channel
+		CHROME_DEV: Google Chrome dev channel
+		CHROME_CANARY: Google Chrome canary (nightly) channel
+		MSEDGE: Microsoft Edge stable release
+		MSEDGE_BETA: Microsoft Edge beta channel
+		MSEDGE_DEV: Microsoft Edge dev channel
+		MSEDGE_CANARY: Microsoft Edge canary channel
+	
+	Example:
+		>>> from browser_use.browser import BrowserProfile, BrowserChannel
+		>>> profile = BrowserProfile(channel=BrowserChannel.CHROME)
+		>>> # Or use string directly
+		>>> profile = BrowserProfile(channel="chrome-beta")
+	"""
 	CHROMIUM = 'chromium'
 	CHROME = 'chrome'
 	CHROME_BETA = 'chrome-beta'
@@ -287,8 +386,7 @@ CliArgStr = Annotated[str, AfterValidator(validate_cli_arg)]
 
 
 class BrowserContextArgs(BaseModel):
-	"""
-	Base model for common browser context parameters used by
+	"""Base model for common browser context parameters used by
 	both BrowserType.new_context() and BrowserType.launch_persistent_context().
 
 	https://playwright.dev/python/docs/api/class-browser#browser-new-context
@@ -328,8 +426,7 @@ class BrowserContextArgs(BaseModel):
 
 
 class BrowserConnectArgs(BaseModel):
-	"""
-	Base model for common browser connect parameters used by
+	"""Base model for common browser connect parameters used by
 	both connect_over_cdp() and connect_over_ws().
 
 	https://playwright.dev/python/docs/api/class-browsertype#browser-type-connect
@@ -342,8 +439,7 @@ class BrowserConnectArgs(BaseModel):
 
 
 class BrowserLaunchArgs(BaseModel):
-	"""
-	Base model for common browser launch parameters used by
+	"""Base model for common browser launch parameters used by
 	both launch() and launch_persistent_context().
 
 	https://playwright.dev/python/docs/api/class-browsertype#browser-type-launch
@@ -438,8 +534,7 @@ class BrowserLaunchArgs(BaseModel):
 
 
 class BrowserNewContextArgs(BrowserContextArgs):
-	"""
-	Pydantic model for new_context() arguments.
+	"""Pydantic model for new_context() arguments.
 	Extends BaseContextParams with storage_state parameter.
 
 	https://playwright.dev/python/docs/api/class-browser#browser-new-context
@@ -472,8 +567,7 @@ class BrowserNewContextArgs(BrowserContextArgs):
 
 
 class BrowserLaunchPersistentContextArgs(BrowserLaunchArgs, BrowserContextArgs):
-	"""
-	Pydantic model for launch_persistent_context() arguments.
+	"""Pydantic model for launch_persistent_context() arguments.
 	Combines browser launch parameters and context parameters,
 	plus adds the user_data_dir parameter.
 
@@ -496,7 +590,9 @@ class BrowserLaunchPersistentContextArgs(BrowserLaunchArgs, BrowserContextArgs):
 
 class ProxySettings(BaseModel):
 	"""Typed proxy settings for Chromium traffic.
-
+	
+	@public
+	
 	- server: Full proxy URL, e.g. "http://host:8080" or "socks5://host:1080"
 	- bypass: Comma-separated hosts to bypass (e.g. "localhost,127.0.0.1,*.internal")
 	- username/password: Optional credentials for authenticated proxies
@@ -508,18 +604,121 @@ class ProxySettings(BaseModel):
 	password: str | None = Field(default=None, description='Proxy auth password')
 
 	def __getitem__(self, key: str) -> str | None:
+		"""Get proxy setting by key.
+		
+		Args:
+			key: The proxy setting key.
+			
+		Returns:
+			The proxy setting value or None.
+		"""
 		return getattr(self, key)
 
 
 class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, BrowserLaunchArgs, BrowserNewContextArgs):
-	"""
+	"""Browser configuration profile for controlling browser behavior.
+	
+	@public
+	
 	A BrowserProfile is a static template collection of kwargs that can be passed to:
-		- BrowserType.launch(**BrowserLaunchArgs)
-		- BrowserType.connect(**BrowserConnectArgs)
-		- BrowserType.connect_over_cdp(**BrowserConnectArgs)
-		- BrowserType.launch_persistent_context(**BrowserLaunchPersistentContextArgs)
-		- BrowserContext.new_context(**BrowserNewContextArgs)
-		- BrowserSession(**BrowserProfile)
+	- BrowserType.launch(**BrowserLaunchArgs)
+	- BrowserType.connect(**BrowserConnectArgs)
+	- BrowserType.connect_over_cdp(**BrowserConnectArgs)
+	- BrowserType.launch_persistent_context(**BrowserLaunchPersistentContextArgs)
+	- BrowserContext.new_context(**BrowserNewContextArgs)
+	- BrowserSession(**BrowserProfile)
+	
+	Key Configuration Categories:
+		
+	Connection Settings:
+		cdp_url: WebSocket URL for remote browser connection
+		is_local: Whether browser runs locally (affects download behavior)
+		
+	Browser Launch:
+		headless: Run without UI (True for servers, False for debugging)
+		executable_path: Custom browser binary path
+		user_data_dir: Directory for persistent browser profile
+		args: Additional command-line arguments
+		devtools: Auto-open DevTools panel
+		
+	Context Settings:
+		viewport: Browser viewport size (default: 1280x720)
+		user_agent: Custom user agent string
+		storage_state: Load cookies/localStorage from file/dict
+		permissions: Grant permissions ["geolocation", "notifications"]
+		
+	Security & Navigation:
+		allowed_domains: Restrict navigation to specific domains
+			Pattern matching: Wildcards (*) match subdomains
+			Examples: ["*.google.com", "https://example.com", "chrome-extension://*"]
+			Enforcement: Checked at tool execution time before navigation
+			Actions blocked if URL doesn't match any allowed pattern
+			Default: None (all domains allowed - use with caution!)
+		disable_security: Disable web security (testing only - allows CORS bypass)
+		proxy: ProxySettings(server="http://proxy:8080", username="user", password="pass")
+		
+	Extensions:
+		enable_default_extensions: Auto-install ad blocker, cookie handler, URL cleaner
+		
+	Recording & Debugging:
+		record_video_dir: Save session videos
+		traces_dir: Chrome trace files for performance analysis
+		highlight_elements: Visual highlight of interacted elements
+		
+	Timing Controls (replaces Playwright's wait_for_load_state):
+		minimum_wait_page_load_time: Minimum wait after any navigation or page change (default: 0.25s)
+			Ensures basic page resources are loaded before interaction
+			Similar to wait_for_load_state("load") in Playwright
+			Increase for slower sites or complex SPAs
+		wait_for_network_idle_page_load_time: Wait for network to be idle (default: 0.5s)
+			Waits until no network requests for this duration
+			Replaces wait_for_load_state("networkidle") in Playwright
+			Critical for AJAX-heavy sites and dynamic content
+			Set to 2-3 seconds for complex SPAs or e-commerce sites
+		wait_between_actions: Delay between browser actions (default: 0.5s)
+			Adds stability by preventing rapid-fire interactions
+			Helps avoid race conditions in dynamic UIs
+		
+	Advanced:
+		cross_origin_iframes: Process out-of-process iframes (slower)
+		auto_download_pdfs: Download PDFs instead of viewing
+		deterministic_rendering: Stable rendering for testing
+		profile_directory: Chrome profile folder name ("Default")
+	
+	Migration from OldConfig:
+		BrowserProfile replaces the deprecated OldConfig class. 
+		Use BrowserProfile for all new code.
+	
+	Common Usage Examples:
+		>>> # Basic headless automation
+		>>> profile = BrowserProfile(headless=True)
+		>>> 
+		>>> # Interactive debugging with custom window size
+		>>> profile = BrowserProfile(
+		...     headless=False,
+		...     window_size=ViewportSize(width=1920, height=1080),
+		...     keep_alive=True,  # Keep browser open after agent.run()
+		...     devtools=True
+		... )
+		>>>
+		>>> # Security testing with disabled protections
+		>>> profile = BrowserProfile(
+		...     disable_security=True,  # Allows CORS bypass for testing
+		...     allowed_domains=["*.example.com"],
+		...     user_data_dir="./browser_data"
+		... )
+		>>> 
+		>>> # Full-featured session with recording
+		>>> profile = BrowserProfile(
+		...     headless=False,
+		...     user_data_dir="./browser_data",
+		...     allowed_domains=["*.example.com"],
+		...     proxy=ProxySettings(server="http://proxy.com:8080"),
+		...     record_video_dir="./recordings",
+		...     enable_default_extensions=True,
+		...     keep_alive=True
+		... )
+		>>> session = BrowserSession(browser_profile=profile)
 	"""
 
 	model_config = ConfigDict(
@@ -546,7 +745,33 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 		default=None,
 		description='List of allowed domains for navigation e.g. ["*.google.com", "https://example.com", "chrome-extension://*"]',
 	)
-	keep_alive: bool | None = Field(default=None, description='Keep browser alive after agent run.')
+	keep_alive: bool | None = Field(
+		default=None,
+		description="""Keep browser session alive after Agent.run() completes.
+		
+		@public
+		
+		When True: Browser session remains active after Agent.run() finishes,
+		allowing manual interactions or additional operations. You must manually
+		call browser_session.stop() or browser_session.kill() to close the browser.
+		
+		When False or None (default): Browser session is automatically killed
+		when Agent.run() completes (in the finally block).
+		
+		Important: Set to True when you need to:
+		- Take screenshots after agent task completion
+		- Perform manual browser interactions post-agent run
+		- Keep the browser open for debugging
+		- Chain multiple agent runs on the same session
+		
+		Example:
+			profile = BrowserProfile(keep_alive=True)
+			agent = Agent(browser=Browser(profile))
+			await agent.run()  # Browser stays alive after this
+			# Can now interact with agent.browser_session
+			await agent.browser_session.stop()  # Manual cleanup required
+		"""
+	)
 
 	# --- Proxy settings ---
 	# New consolidated proxy config (typed)
@@ -560,7 +785,7 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 	)
 	window_size: ViewportSize | None = Field(
 		default=None,
-		description='Browser window size to use when headless=False.',
+		description='Browser window size to use when headless=False. Replaces deprecated window_width and window_height parameters. Example: ViewportSize(width=1920, height=1080)',
 	)
 	window_height: int | None = Field(default=None, description='DEPRECATED, use window_size["height"] instead', exclude=True)
 	window_width: int | None = Field(default=None, description='DEPRECATED, use window_size["width"] instead', exclude=True)
@@ -575,10 +800,19 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 
 	# --- Page load/wait timings ---
 
-	minimum_wait_page_load_time: float = Field(default=0.25, description='Minimum time to wait before capturing page state.')
-	wait_for_network_idle_page_load_time: float = Field(default=0.5, description='Time to wait for network idle.')
+	minimum_wait_page_load_time: float = Field(
+		default=0.25,
+		description='Minimum seconds to wait after navigation before considering page ready. Replaces wait_for_load_state("load"). Increase for slower sites.'
+	)
+	wait_for_network_idle_page_load_time: float = Field(
+		default=0.5,
+		description='Seconds to wait for network idle (no requests) after navigation. Replaces wait_for_load_state("networkidle"). Set to 2-3s for AJAX-heavy sites.'
+	)
 
-	wait_between_actions: float = Field(default=0.5, description='Time to wait between actions.')
+	wait_between_actions: float = Field(
+		default=0.5,
+		description='Seconds to wait between browser actions like clicks and typing. Prevents race conditions in dynamic UIs.'
+	)
 
 	# --- UI/viewport/DOM ---
 
@@ -641,11 +875,9 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 
 	@model_validator(mode='after')
 	def warn_user_data_dir_non_default_version(self) -> Self:
-		"""
-		If user is using default profile dir with a non-default channel, force-change it
+		"""If user is using default profile dir with a non-default channel, force-change it
 		to avoid corrupting the default data dir created with a different channel.
 		"""
-
 		is_not_using_default_chromium = self.executable_path or self.channel not in (BROWSERUSE_DEFAULT_CHANNEL, None)
 		if self.user_data_dir == CONFIG.BROWSER_USE_DEFAULT_USER_DATA_DIR and is_not_using_default_chromium:
 			alternate_name = (
@@ -663,6 +895,11 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 
 	@model_validator(mode='after')
 	def warn_deterministic_rendering_weirdness(self) -> Self:
+		"""Warn about deterministic rendering risks and side effects.
+		
+		Returns:
+			Self for method chaining.
+		"""
 		if self.deterministic_rendering:
 			logger.warning(
 				'⚠️ BrowserSession(deterministic_rendering=True) is NOT RECOMMENDED. It breaks many sites and increases chances of getting blocked by anti-bot systems. '
@@ -679,7 +916,6 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 
 	def get_args(self) -> list[str]:
 		"""Get the list of all Chrome CLI launch args for this profile (compiled from defaults, user-provided, and system-specific)."""
-
 		if isinstance(self.ignore_default_args, list):
 			default_args = set(CHROME_DEFAULT_ARGS) - set(self.ignore_default_args)
 		elif self.ignore_default_args is True:
@@ -726,7 +962,11 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 		return final_args_list
 
 	def _get_extension_args(self) -> list[str]:
-		"""Get Chrome args for enabling default extensions (ad blocker and cookie handler)."""
+		"""Get Chrome args for enabling default extensions.
+		
+		Returns:
+			List of Chrome CLI arguments for loading extensions.
+		"""
 		extension_paths = self._ensure_default_extensions_downloaded()
 
 		args = [
@@ -742,11 +982,14 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 		return args
 
 	def _ensure_default_extensions_downloaded(self) -> list[str]:
+		"""Ensure default extensions are downloaded and cached locally.
+		
+		Downloads and extracts automation-optimized extensions like uBlock Origin,
+		cookie handlers, and URL cleaners for improved browsing experience.
+		
+		Returns:
+			List of paths to extension directories.
 		"""
-		Ensure default extensions are downloaded and cached locally.
-		Returns list of paths to extension directories.
-		"""
-
 		# Extension definitions - optimized for automation and content extraction
 		extensions = [
 			{
@@ -826,7 +1069,15 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 		return extension_paths
 
 	def _download_extension(self, url: str, output_path: Path) -> None:
-		"""Download extension .crx file."""
+		"""Download extension .crx file from URL.
+		
+		Args:
+			url: The URL to download the extension from.
+			output_path: The path where the .crx file should be saved.
+			
+		Raises:
+			Exception: If the download fails.
+		"""
 		import urllib.request
 
 		try:
@@ -837,7 +1088,15 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 			raise Exception(f'Failed to download extension: {e}')
 
 	def _extract_extension(self, crx_path: Path, extract_dir: Path) -> None:
-		"""Extract .crx file to directory."""
+		"""Extract .crx file to directory.
+		
+		Args:
+			crx_path: Path to the .crx file to extract.
+			extract_dir: Directory where the extension should be extracted.
+			
+		Raises:
+			Exception: If extraction fails or manifest.json is not found.
+		"""
 		import os
 		import zipfile
 
@@ -893,11 +1152,9 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 
 	@observe_debug(ignore_input=True, ignore_output=True, name='detect_display_configuration')
 	def detect_display_configuration(self) -> None:
+		"""Detect the system display size and initialize the display-related config defaults:
+		screen, window_size, window_position, viewport, no_viewport, device_scale_factor
 		"""
-		Detect the system display size and initialize the display-related config defaults:
-		        screen, window_size, window_position, viewport, no_viewport, device_scale_factor
-		"""
-
 		display_size = get_display_size()
 		has_screen_available = bool(display_size)
 		self.screen = self.screen or display_size or ViewportSize(width=1280, height=1100)

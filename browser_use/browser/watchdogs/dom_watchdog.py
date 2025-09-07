@@ -41,6 +41,7 @@ class DOMWatchdog(BaseWatchdog):
 	_dom_service: DomService | None = None
 
 	async def on_TabCreatedEvent(self, event: TabCreatedEvent) -> None:
+		"""Inject DOM tracking scripts when a new tab is created."""
 		# self.logger.debug('Setting up init scripts in browser')
 
 		self.logger.debug('💉 Injecting DOM Service init script to track event listeners added to DOM elements by JS...')
@@ -504,7 +505,6 @@ class DOMWatchdog(BaseWatchdog):
 		Returns:
 			PageInfo with all viewport, page dimensions, and scroll information
 		"""
-
 		from browser_use.browser.views import PageInfo
 
 		# Get CDP session for the current target

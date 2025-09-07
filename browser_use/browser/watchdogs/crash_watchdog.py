@@ -108,6 +108,7 @@ class CrashWatchdog(BaseWatchdog):
 			# cdp_client.on('Network.loadingFinished', on_loading_finished, session_id=session_id)
 
 			def on_target_crashed(event: TargetCrashedEvent, session_id: SessionID | None = None):
+				"""Handle target crashed events."""
 				# Create and track the task
 				task = asyncio.create_task(self._on_target_crash_cdp(target_id))
 				self._cdp_event_tasks.add(task)
@@ -291,7 +292,6 @@ class CrashWatchdog(BaseWatchdog):
 
 	async def _check_browser_health(self) -> None:
 		"""Check if browser and targets are still responsive."""
-
 		try:
 			try:
 				self.logger.debug(f'[CrashWatchdog] Checking browser health for target {self.browser_session.agent_focus}')

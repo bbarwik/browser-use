@@ -1,0 +1,1 @@
+"""Browser watchdog modules for monitoring and handling browser events."""

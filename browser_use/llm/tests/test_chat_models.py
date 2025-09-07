@@ -1,3 +1,4 @@
+"""Tests for various LLM chat model implementations."""
 import os
 
 import pytest
@@ -15,14 +16,13 @@ class CapitalResponse(BaseModel):
 
 
 class TestChatModels:
+	"""Test suite for all chat model implementations."""
 	from browser_use.llm.messages import (
 		AssistantMessage,
 		BaseMessage,
 		SystemMessage,
 		UserMessage,
 	)
-
-	"""Test suite for all chat model implementations"""
 
 	# Test Constants
 	SYSTEM_MESSAGE = SystemMessage(content=[ContentPartTextParam(text='You are a helpful assistant.', type='text')])

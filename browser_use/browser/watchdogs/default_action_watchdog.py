@@ -213,14 +213,12 @@ class DefaultActionWatchdog(BaseWatchdog):
 	# ========== Implementation Methods ==========
 
 	async def _click_element_node_impl(self, element_node, while_holding_ctrl: bool = False) -> dict | None:
-		"""
-		Click an element using pure CDP with multiple fallback methods for getting element geometry.
+		"""Click an element using pure CDP with multiple fallback methods for getting element geometry.
 
 		Args:
 			element_node: The DOM element to click
 			new_tab: If True, open any resulting navigation in a new tab
 		"""
-
 		try:
 			# Check if element is a file input or select dropdown - these should not be clicked
 			tag_name = element_node.tag_name.lower() if element_node.tag_name else ''
@@ -542,8 +540,7 @@ class DefaultActionWatchdog(BaseWatchdog):
 			)
 
 	async def _type_to_page(self, text: str):
-		"""
-		Type text to the page (whatever element currently has focus).
+		"""Type text to the page (whatever element currently has focus).
 		This is used when index is 0 or when an element can't be found.
 		"""
 		try:
@@ -584,8 +581,7 @@ class DefaultActionWatchdog(BaseWatchdog):
 			raise Exception(f'Failed to type to page: {str(e)}')
 
 	async def _check_element_focusability(self, element_node, object_id: str, session_id: str) -> dict[str, Any]:
-		"""
-		Check if an element is likely to be focusable and visible.
+		"""Check if an element is likely to be focusable and visible.
 
 		Returns:
 			Dict with keys: 'visible', 'focusable', 'interactive', 'disabled'
@@ -657,10 +653,8 @@ class DefaultActionWatchdog(BaseWatchdog):
 			return {'visible': False, 'focusable': False, 'interactive': False, 'disabled': True}
 
 	async def _input_text_element_node_impl(self, element_node, text: str, clear_existing: bool = True) -> dict | None:
+		"""Input text into an element using pure CDP with improved focus fallbacks.
 		"""
-		Input text into an element using pure CDP with improved focus fallbacks.
-		"""
-
 		try:
 			# Get CDP client
 			cdp_client = self.browser_session.cdp_client
@@ -846,8 +840,7 @@ class DefaultActionWatchdog(BaseWatchdog):
 			raise BrowserError(f'Failed to input text into element: {repr(element_node)}')
 
 	async def _scroll_with_cdp_gesture(self, pixels: int) -> bool:
-		"""
-		Scroll using CDP Input.dispatchMouseEvent to simulate mouse wheel.
+		"""Scroll using CDP Input.dispatchMouseEvent to simulate mouse wheel.
 
 		Args:
 			pixels: Number of pixels to scroll (positive = down, negative = up)
@@ -1293,7 +1286,6 @@ class DefaultActionWatchdog(BaseWatchdog):
 
 	async def on_ScrollToTextEvent(self, event: ScrollToTextEvent) -> None:
 		"""Handle scroll to text request with CDP. Raises exception if text not found."""
-
 		# TODO: handle looking for text inside cross-origin iframes as well
 
 		# Get CDP client and session

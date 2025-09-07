@@ -1,3 +1,4 @@
+"""DeepSeek chat model implementation."""
 from __future__ import annotations
 
 import json
@@ -27,7 +28,53 @@ T = TypeVar('T', bound=BaseModel)
 
 @dataclass
 class ChatDeepSeek(BaseChatModel):
-	"""DeepSeek /chat/completions 封装（OpenAI-compatible）。"""
+	"""DeepSeek chat model integration for browser automation.
+	
+	@public
+	
+	Provides access to DeepSeek's reasoning and coding models with competitive
+	performance at low cost. Supports DeepSeek-V3, DeepSeek-Chat, and other
+	DeepSeek models optimized for complex reasoning tasks.
+	
+	Constructor Parameters:
+		model: Model name (default: "deepseek-chat")
+			- "deepseek-chat": General purpose model
+			- "deepseek-v3": Latest reasoning model
+			- "deepseek-coder": Code-focused model
+		api_key: DeepSeek API key (defaults to DEEPSEEK_API_KEY env var)
+		temperature: Sampling temperature 0-2
+		top_p: Nucleus sampling threshold
+		seed: Random seed for deterministic outputs
+		max_tokens: Maximum tokens in response
+		base_url: API endpoint (default: https://api.deepseek.com/v1)
+		timeout: Request timeout in seconds
+		client_params: Additional OpenAI client parameters
+	
+	Feature Support:
+		- Tool Calling: Yes (full function calling support)
+		- Structured Output: Yes (via JSON mode)
+		- Vision: Limited (use_vision=False recommended)
+		- Context: 64k-128k tokens depending on model
+		- Strengths: Reasoning, coding, math, cost-effective
+	
+	Vision Guidance:
+		DeepSeek models have limited vision capabilities. For tasks requiring
+		detailed image analysis or screenshots, set use_vision=False or use
+		ChatOpenAI/ChatAnthropic instead. Basic image understanding may work
+		but is not optimized for browser automation scenarios.
+	
+	Example:
+		>>> llm = ChatDeepSeek(
+		...     model="deepseek-chat",
+		...     api_key="sk-...",
+		...     temperature=0.7,
+		... )
+		>>> agent = Agent(
+		...     task="Code analysis and automation", 
+		...     llm=llm,
+		...     use_vision=False  # Recommended for DeepSeek
+		... )
+	"""
 
 	model: str = 'deepseek-chat'
 
@@ -84,8 +131,7 @@ class ChatDeepSeek(BaseChatModel):
 		tools: list[dict[str, Any]] | None = None,
 		stop: list[str] | None = None,
 	) -> ChatInvokeCompletion[T] | ChatInvokeCompletion[str]:
-		"""
-		DeepSeek ainvoke 支持:
+		"""DeepSeek ainvoke 支持:
 		1. 普通文本/多轮对话
 		2. Function Calling
 		3. JSON Output (response_format)

@@ -1,3 +1,4 @@
+"""DOM data models and view classes."""
 import hashlib
 from dataclasses import asdict, dataclass, field
 from enum import Enum
@@ -53,15 +54,42 @@ DEFAULT_INCLUDE_ATTRIBUTES = [
 
 @dataclass
 class CurrentPageTargets:
+	"""Container for current page and iframe target information.
+	
+	@public
+	
+	This class holds information about the current page and all iframes across
+	all pages in the browser session. Used internally for managing CDP sessions
+	and cross-origin iframe communication.
+	
+	Attributes:
+		page_session: TargetInfo for the main page
+		iframe_sessions: List of TargetInfo for all iframes (not just current page)
+	
+	Note:
+		Iframe sessions are ALL the iframe sessions of all the pages, not just
+		the current page. This is important for proper session management.
+	
+	Example:
+		>>> targets = await browser_session._get_current_page_targets()
+		>>> print(f"Main page: {targets.page_session.url}")
+		>>> print(f"Iframes: {len(targets.iframe_sessions)}")
+	"""
 	page_session: TargetInfo
 	iframe_sessions: list[TargetInfo]
-	"""
-	Iframe sessions are ALL the iframes sessions of all the pages (not just the current page)
-	"""
 
 
 @dataclass
 class TargetAllTrees:
+	"""Container for all CDP tree data for a target.
+	
+	Args:
+		snapshot: The DOM snapshot data from CDP.
+		dom_tree: The DOM tree structure from CDP.
+		ax_tree: The accessibility tree data from CDP.
+		device_pixel_ratio: The device pixel ratio for coordinate calculations.
+		cdp_timing: Performance timing data for CDP operations.
+	"""
 	snapshot: CaptureSnapshotReturns
 	dom_tree: GetDocumentReturns
 	ax_tree: GetFullAXTreeReturns
@@ -92,6 +120,12 @@ class SimplifiedNode:
 	excluded_by_parent: bool = False  # New field for bbox filtering
 
 	def __json__(self) -> dict:
+		"""Serialize the simplified node to a dictionary.
+		
+		Returns:
+			A dictionary representation of the simplified node with original node data
+			and child nodes, excluding parent references.
+		"""
 		original_node_json = self.original_node.__json__()
 		del original_node_json['children_nodes']
 		del original_node_json['shadow_roots']
@@ -122,6 +156,26 @@ class NodeType(int, Enum):
 
 @dataclass(slots=True)
 class DOMRect:
+	"""Represents a rectangular area in the DOM with position and dimensions.
+	
+	@public
+	
+	Provides position and dimension information for DOM elements.
+	Used in EnhancedDOMTreeNode.absolute_position to describe element bounds.
+	
+	Attributes:
+		x: The x-coordinate of the rectangle's left edge in pixels
+		y: The y-coordinate of the rectangle's top edge in pixels
+		width: The width of the rectangle in pixels
+		height: The height of the rectangle in pixels
+	
+	Example:
+		>>> element = await browser_session.get_element_by_index(5)
+		>>> if element.absolute_position:
+		...     pos = element.absolute_position
+		...     print(f"Element at ({pos.x}, {pos.y})")
+		...     print(f"Size: {pos.width}x{pos.height}")
+	"""
 	x: float
 	y: float
 	width: float
@@ -142,6 +196,7 @@ class EnhancedAXProperty:
 
 @dataclass(slots=True)
 class EnhancedAXNode:
+	"""Enhanced accessibility node with additional properties."""
 	ax_node_id: str
 	"""Not to be confused the DOM node_id. Only useful for AX node tree"""
 	ignored: bool
@@ -204,15 +259,68 @@ class EnhancedSnapshotNode:
 
 @dataclass(slots=True)
 class EnhancedDOMTreeNode:
-	"""
-	Enhanced DOM tree node that contains information from AX, DOM, and Snapshot trees. It's mostly based on the types on DOM node type with enhanced data from AX and Snapshot trees.
-
-	@dev when serializing check if the value is a valid value first!
-
-	Learn more about the fields:
+	"""Enhanced DOM tree node that contains information from AX, DOM, and Snapshot trees.
+	
+	@public
+	
+	This is the primary data structure for representing DOM elements in browser-use 0.7.
+	It combines data from Chrome DevTools Protocol's DOM, Accessibility, and Snapshot
+	trees into a single unified structure. This node type is returned from selector_map
+	in BrowserStateSummary and replaces Playwright's ElementHandle.
+	
+	Key Attributes:
+		element_index: Unique index for this element in the current DOM state
+		node_id: CDP DOM node ID for this element
+		backend_node_id: CDP backend node ID (persistent across navigations)
+		node_type: Type of DOM node (ELEMENT_NODE, TEXT_NODE, etc.)
+		node_name: Tag name for element nodes (e.g., 'DIV', 'INPUT')
+		node_value: Text content for text nodes
+		attributes: Dict of HTML attributes and their values
+		is_visible: Whether the element is currently visible on the page
+		is_scrollable: Whether the element can be scrolled
+		absolute_position: DOMRect with absolute position on the page
+		target_id: CDP target ID for the frame containing this element
+		frame_id: Frame ID if this element is in an iframe
+		session_id: CDP session ID for cross-origin iframes
+		tag_name: Convenience property for node_name in uppercase
+	
+	Navigation Properties:
+		parent_node: Reference to parent node in the tree
+		children_nodes: List of child nodes
+		content_document: For iframe elements, the document node inside
+		shadow_roots: List of shadow root nodes if present
+	
+	Accessibility Properties:
+		ax_node: Enhanced accessibility node with ARIA properties
+	
+	Snapshot Properties:
+		snapshot_node: Enhanced snapshot data with layout information
+	
+	Useful Methods:
+		get_all_children_text(): Get all text content from element and children
+		is_actually_scrollable: Enhanced scroll detection property
+	
+	Learn more about the underlying CDP fields:
 	- (DOM node) https://chromedevtools.github.io/devtools-protocol/tot/DOM/#type-BackendNode
 	- (AX node) https://chromedevtools.github.io/devtools-protocol/tot/Accessibility/#type-AXNode
 	- (Snapshot node) https://chromedevtools.github.io/devtools-protocol/tot/DOMSnapshot/#type-DOMNode
+	
+	Example:
+		>>> # Get element from browser state (replaces wait_for_selector)
+		>>> state = await browser_session.get_browser_state_summary()
+		>>> for index, element in state.dom_state.selector_map.items():
+		...     if element.tag_name == 'BUTTON' and 'Submit' in element.get_all_children_text():
+		...         # Found the element, now interact with it
+		...         node = await browser_session.get_element_by_index(index)
+		...         await browser_session.event_bus.dispatch(ClickElementEvent(node=node))
+		...         break
+		>>> 
+		>>> # Check element properties
+		>>> node = await browser_session.get_element_by_index(5)
+		>>> print(f"Tag: {node.tag_name}")
+		>>> print(f"Visible: {node.is_visible}")
+		>>> print(f"Text: {node.get_all_children_text()}")
+		>>> print(f"Attributes: {node.attributes}")
 	"""
 
 	# region - DOM Node data
@@ -280,16 +388,47 @@ class EnhancedDOMTreeNode:
 
 	@property
 	def parent(self) -> 'EnhancedDOMTreeNode | None':
+		"""Get the parent node in the DOM tree.
+		
+		@public
+		
+		Returns the parent node of this element in the DOM hierarchy.
+		Returns None if this is a root node or has no parent.
+		
+		Returns:
+			The parent EnhancedDOMTreeNode or None.
+		
+		Example:
+			>>> element = await browser_session.get_element_by_index(10)
+			>>> parent = element.parent
+			>>> if parent:
+			...     print(f"Parent tag: {parent.tag_name}")
+		"""
 		return self.parent_node
 
 	@property
 	def children(self) -> list['EnhancedDOMTreeNode']:
+		"""Get all direct child nodes.
+		
+		@public
+		
+		Returns a list of all direct child nodes of this element.
+		Does not include shadow roots (use children_and_shadow_roots for that).
+		
+		Returns:
+			List of child EnhancedDOMTreeNode objects.
+		
+		Example:
+			>>> element = await browser_session.get_element_by_index(5)
+			>>> for child in element.children:
+			...     if child.tag_name == 'button':
+			...         print(f"Found button child: {child.element_index}")
+		"""
 		return self.children_nodes or []
 
 	@property
 	def children_and_shadow_roots(self) -> list['EnhancedDOMTreeNode']:
-		"""
-		Returns all children nodes, including shadow roots
+		"""Returns all children nodes, including shadow roots
 		"""
 		children = self.children_nodes or []
 		if self.shadow_roots:
@@ -298,11 +437,41 @@ class EnhancedDOMTreeNode:
 
 	@property
 	def tag_name(self) -> str:
+		"""Get the lowercase tag name of this element.
+		
+		@public
+		
+		Returns the HTML tag name in lowercase (e.g., 'div', 'input', 'button').
+		This is a convenience property for node_name.lower().
+		
+		Returns:
+			Lowercase tag name string.
+		
+		Example:
+			>>> element = await browser_session.get_element_by_index(7)
+			>>> if element.tag_name == 'input':
+			...     print("Found an input field")
+		"""
 		return self.node_name.lower()
 
 	@property
 	def xpath(self) -> str:
-		"""Generate XPath for this DOM node, stopping at shadow boundaries or iframes."""
+		"""Generate XPath for this DOM node, stopping at shadow boundaries or iframes.
+		
+		@public
+		
+		Constructs an XPath selector that uniquely identifies this element
+		within its document context. The path stops at shadow DOM boundaries
+		or iframe boundaries since these create separate document contexts.
+		
+		Returns:
+			XPath string for this element.
+		
+		Example:
+			>>> element = await browser_session.get_element_by_index(12)
+			>>> print(f"Element XPath: {element.xpath}")
+			>>> # Output: /html/body/div[2]/form/input[1]
+		"""
 		segments = []
 		current_element = self
 
@@ -329,7 +498,13 @@ class EnhancedDOMTreeNode:
 
 	def _get_element_position(self, element: 'EnhancedDOMTreeNode') -> int:
 		"""Get the position of an element among its siblings with the same tag name.
-		Returns 0 if it's the only element of its type, otherwise returns 1-based index."""
+		
+		Args:
+			element: The DOM element to find the position for.
+			
+		Returns:
+			0 if it's the only element of its type, otherwise returns 1-based index.
+		"""
 		if not element.parent_node or not element.parent_node.children_nodes:
 			return 0
 
@@ -372,6 +547,24 @@ class EnhancedDOMTreeNode:
 		}
 
 	def get_all_children_text(self, max_depth: int = -1) -> str:
+		"""Recursively get all text content from this node and its children.
+		
+		@public
+		
+		Extracts all text content from this element and its descendants.
+		Useful for getting the complete text within a container element.
+		
+		Args:
+			max_depth: Maximum depth to traverse (-1 for unlimited).
+		
+		Returns:
+			Combined text content from all descendant text nodes.
+		
+		Example:
+			>>> element = await browser_session.get_element_by_index(10)
+			>>> text = element.get_all_children_text()
+			>>> print(f"Element text: {text}")
+		"""
 		text_parts = []
 
 		def collect_text(node: EnhancedDOMTreeNode, current_depth: int) -> None:
@@ -394,8 +587,7 @@ class EnhancedDOMTreeNode:
 		return '\n'.join(text_parts).strip()
 
 	def __repr__(self) -> str:
-		"""
-		@DEV ! don't display this to the LLM, it's SUPER long
+		"""@DEV ! don't display this to the LLM, it's SUPER long
 		"""
 		attributes = ', '.join([f'{k}={v}' for k, v in self.attributes.items()])
 		is_scrollable = getattr(self, 'is_scrollable', False)
@@ -406,19 +598,36 @@ class EnhancedDOMTreeNode:
 		)
 
 	def llm_representation(self, max_text_length: int = 100) -> str:
+		"""Token friendly representation of the node, used in the LLM
 		"""
-		Token friendly representation of the node, used in the LLM
-		"""
-
 		return f'<{self.tag_name}>{cap_text_length(self.get_all_children_text(), max_text_length) or ""}'
 
 	@property
 	def is_actually_scrollable(self) -> bool:
-		"""
-		Enhanced scroll detection that combines CDP detection with CSS analysis.
-
+		"""Enhanced scroll detection that combines CDP detection with CSS analysis.
+		
+		@public
+		
 		This detects scrollable elements that Chrome's CDP might miss, which is common
-		in iframes and dynamically sized containers.
+		in iframes and dynamically sized containers. It performs more thorough
+		checks than the basic is_scrollable property.
+		
+		Returns:
+			True if the element can be scrolled, False otherwise.
+		
+		Example:
+			>>> element = await browser_session.get_element_by_index(15)
+			>>> if element.is_actually_scrollable:
+			...     # Element can be scrolled
+			...     tools = Tools()
+			...     await tools.act(
+			...         action=ActionModel(scroll=ScrollAction(
+			...             down=True, 
+			...             num_pages=1.0,
+			...             frame_element_index=element.element_index
+			...         )),
+			...         browser_session=browser_session
+			...     )
 		"""
 		# First check if CDP already detected it as scrollable
 		if self.is_scrollable:
@@ -465,8 +674,7 @@ class EnhancedDOMTreeNode:
 
 	@property
 	def should_show_scroll_info(self) -> bool:
-		"""
-		Simple check: show scroll info only if this element is scrollable
+		"""Simple check: show scroll info only if this element is scrollable
 		and doesn't have a scrollable parent (to avoid nested scroll spam).
 
 		Special case for iframes: Always show scroll info since Chrome might not
@@ -492,7 +700,11 @@ class EnhancedDOMTreeNode:
 		return True
 
 	def _find_html_in_content_document(self) -> 'EnhancedDOMTreeNode | None':
-		"""Find HTML element in iframe content document."""
+		"""Find HTML element in iframe content document.
+		
+		Returns:
+			The HTML element node if found, None otherwise.
+		"""
 		if not self.content_document:
 			return None
 
@@ -510,7 +722,34 @@ class EnhancedDOMTreeNode:
 
 	@property
 	def scroll_info(self) -> dict[str, Any] | None:
-		"""Calculate scroll information for this element if it's scrollable."""
+		"""Calculate scroll information for this element if it's scrollable.
+		
+		@public
+		
+		Provides detailed scroll metrics including position, pages above/below,
+		and scroll percentages. Only available for scrollable elements.
+		
+		Returns:
+			Dictionary with scroll metrics or None if not scrollable.
+			Keys include:
+			- pages_above: Number of viewport pages scrolled above
+			- pages_below: Number of viewport pages available below
+			- vertical_scroll_percentage: Current vertical scroll position (0-100)
+			- horizontal_scroll_percentage: Current horizontal scroll position (0-100)
+			- can_scroll_down: Whether more content is available below
+			- can_scroll_up: Whether content is available above
+			- can_scroll_left: Whether content is available to the left
+			- can_scroll_right: Whether content is available to the right
+		
+		Example:
+			>>> element = await browser_session.get_element_by_index(20)
+			>>> if element.scroll_info:
+			...     info = element.scroll_info
+			...     print(f"Pages below: {info['pages_below']:.1f}")
+			...     print(f"Scroll position: {info['vertical_scroll_percentage']:.0f}%")
+			...     if info['can_scroll_down']:
+			...         print("Can scroll down for more content")
+		"""
 		if not self.is_actually_scrollable or not self.snapshot_node:
 			return None
 
@@ -623,12 +862,10 @@ class EnhancedDOMTreeNode:
 		return f'[<{self.tag_name}>#{self.frame_id[-4:] if self.frame_id else "?"}:{self.element_index}]'
 
 	def __hash__(self) -> int:
-		"""
-		Hash the element based on its parent branch path and attributes.
+		"""Hash the element based on its parent branch path and attributes.
 
 		TODO: migrate this to use only backendNodeId + current SessionId
 		"""
-
 		# Get parent branch path
 		parent_branch_path = self._get_parent_branch_path()
 		parent_branch_path_string = '/'.join(parent_branch_path)
@@ -644,8 +881,7 @@ class EnhancedDOMTreeNode:
 		return int(element_hash[:16], 16)
 
 	def parent_branch_hash(self) -> int:
-		"""
-		Hash the element based on its parent branch path and attributes.
+		"""Hash the element based on its parent branch path and attributes.
 		"""
 		parent_branch_path = self._get_parent_branch_path()
 		parent_branch_path_string = '/'.join(parent_branch_path)
@@ -654,7 +890,11 @@ class EnhancedDOMTreeNode:
 		return int(element_hash[:16], 16)
 
 	def _get_parent_branch_path(self) -> list[str]:
-		"""Get the parent branch path as a list of tag names from root to current element."""
+		"""Get the parent branch path as a list of tag names from root to current element.
+		
+		Returns:
+			A list of tag names representing the path from root to current element.
+		"""
 		parents: list['EnhancedDOMTreeNode'] = []
 		current_element: 'EnhancedDOMTreeNode | None' = self
 
@@ -672,6 +912,43 @@ DOMSelectorMap = dict[int, EnhancedDOMTreeNode]
 
 @dataclass
 class SerializedDOMState:
+	"""Serialized DOM state for LLM consumption.
+	
+	@public
+	
+	Contains DOM tree representation and selector map for element interaction.
+	This is returned as part of BrowserStateSummary from get_browser_state_summary()
+	and is the primary data structure for accessing DOM elements in browser-use 0.7.
+	
+	Attributes:
+		selector_map: Dictionary mapping element indices to EnhancedDOMTreeNode objects.
+			This is the main way to access interactive elements by their indices.
+			Keys are integer indices, values are EnhancedDOMTreeNode instances.
+		_root: Internal simplified node tree (not for direct use)
+	
+	Methods:
+		llm_representation(include_attributes): Get string representation of DOM tree
+			for LLM processing. This returns the serialized DOM tree as text.
+			
+	Example:
+		>>> # Get browser state and access interactive elements
+		>>> state = await browser_session.get_browser_state_summary()
+		>>> 
+		>>> # Iterate through all interactive elements
+		>>> for index, element in state.dom_state.selector_map.items():
+		...     print(f"[{index}] {element.tag_name}: {element.get_all_children_text()}")
+		>>> 
+		>>> # Find specific elements for interaction (replaces wait_for_selector)
+		>>> button_element = None
+		>>> for index, element in state.dom_state.selector_map.items():
+		...     if element.tag_name == 'BUTTON' and 'Submit' in element.get_all_children_text():
+		...         button_element = await browser_session.get_element_by_index(index)
+		...         break
+		>>> 
+		>>> # Get DOM representation for LLM
+		>>> dom_text = state.dom_state.llm_representation()
+		>>> print(f"DOM tree: {dom_text[:500]}...")  # First 500 chars
+	"""
 	_root: SimplifiedNode | None
 	"""Not meant to be used directly, use `llm_representation` instead"""
 
@@ -694,11 +971,34 @@ class SerializedDOMState:
 
 @dataclass
 class DOMInteractedElement:
-	"""
-	DOMInteractedElement is a class that represents a DOM element that has been interacted with.
-	It is used to store the DOM element that has been interacted with and to store the DOM element that has been interacted with.
-
-	TODO: this is a bit of a hack, we should probably have a better way to do this
+	"""Represents a DOM element that has been interacted with by the agent.
+	
+	@public
+	
+	This class captures information about DOM elements that the agent has
+	interacted with (clicked, typed into, etc.) during a browser session.
+	It stores a snapshot of the element's state at the time of interaction
+	for history tracking and debugging purposes.
+	
+	Attributes:
+		node_id: CDP DOM node ID of the interacted element
+		backend_node_id: CDP backend node ID (persistent across navigations)
+		frame_id: Frame ID if element is in an iframe, None otherwise
+		node_type: Type of DOM node (ELEMENT_NODE, TEXT_NODE, etc.)
+		node_value: Text content for text nodes
+		node_name: Tag name for element nodes (e.g., 'DIV', 'INPUT')
+		attributes: Dictionary of HTML attributes at interaction time
+		bounds: DOMRect with element position and dimensions
+		x_path: XPath selector to the element
+		element_hash: Hash value for element identification
+	
+	Example:
+		>>> # Element is captured when interaction occurs
+		>>> state = await browser_session.get_browser_state_summary()
+		>>> for interaction in state.interacted_element:
+		...     if interaction:
+		...         print(f"Interacted with: {interaction.node_name}")
+		...         print(f"XPath: {interaction.x_path}")
 	"""
 
 	node_id: int
@@ -717,6 +1017,11 @@ class DOMInteractedElement:
 	element_hash: int
 
 	def to_dict(self) -> dict[str, Any]:
+		"""Convert the interacted element to a dictionary representation.
+		
+		Returns:
+			A dictionary containing the element's core information.
+		"""
 		return {
 			'node_type': self.node_type.value,
 			'node_value': self.node_value,
@@ -727,6 +1032,14 @@ class DOMInteractedElement:
 
 	@classmethod
 	def load_from_enhanced_dom_tree(cls, enhanced_dom_tree: EnhancedDOMTreeNode) -> 'DOMInteractedElement':
+		"""Create a DOMInteractedElement from an EnhancedDOMTreeNode.
+		
+		Args:
+			enhanced_dom_tree: The enhanced DOM tree node to convert.
+			
+		Returns:
+			A new DOMInteractedElement instance.
+		"""
 		return cls(
 			node_id=enhanced_dom_tree.node_id,
 			backend_node_id=enhanced_dom_tree.backend_node_id,

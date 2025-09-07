@@ -1,3 +1,4 @@
+"""OpenAI chat model implementation."""
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Literal, TypeVar, overload
@@ -35,11 +36,48 @@ ReasoningModels: list[ChatModel | str] = [
 
 @dataclass
 class ChatOpenAI(BaseChatModel):
-	"""
+	"""OpenAI chat model integration for browser automation.
+	
+	@public
+	
 	A wrapper around AsyncOpenAI that implements the BaseLLM protocol.
-
 	This class accepts all AsyncOpenAI parameters while adding model
-	and temperature parameters for the LLM interface (if temperature it not `None`).
+	and temperature parameters for the LLM interface (if temperature is not `None`).
+	
+	Supports all OpenAI chat models including GPT-4, GPT-3.5, and o1 reasoning models.
+	Handles structured output, vision capabilities, and automatic retries.
+	
+	Constructor Parameters:
+		model: Model name ("gpt-4", "gpt-3.5-turbo", "o1-preview", etc.)
+		api_key: OpenAI API key (defaults to OPENAI_API_KEY env var)
+		temperature: Sampling temperature 0-2 (default: 0.2 for consistency)
+		frequency_penalty: Reduce repetition -2 to 2 (default: 0.3)
+		reasoning_effort: For o1 models: "low", "medium", "high" (default: "low")
+		seed: Deterministic sampling seed
+		top_p: Nucleus sampling threshold
+		max_completion_tokens: Max tokens in response (default: 4096)
+		
+		base_url: Custom API endpoint (for OpenAI-compatible servers)
+		organization: OpenAI organization ID
+		project: OpenAI project ID
+		timeout: Request timeout in seconds
+		max_retries: Retry attempts on failure (default: 5)
+		add_schema_to_system_prompt: Include schema in prompt vs response_format
+		
+	Example:
+		>>> llm = ChatOpenAI(
+		...     model="gpt-4",
+		...     api_key="sk-...",
+		...     temperature=0.7
+		... )
+		>>> agent = Agent(task="Search for docs", llm=llm)
+		
+		>>> # Using local OpenAI-compatible server
+		>>> llm = ChatOpenAI(
+		...     model="local-model",
+		...     base_url="http://localhost:8000/v1",
+		...     api_key="dummy"
+		... )
 	"""
 
 	# Model configuration
@@ -99,8 +137,7 @@ class ChatOpenAI(BaseChatModel):
 		return client_params
 
 	def get_client(self) -> AsyncOpenAI:
-		"""
-		Returns an AsyncOpenAI client.
+		"""Returns an AsyncOpenAI client.
 
 		Returns:
 			AsyncOpenAI: An instance of the AsyncOpenAI client.
@@ -146,8 +183,7 @@ class ChatOpenAI(BaseChatModel):
 	async def ainvoke(
 		self, messages: list[BaseMessage], output_format: type[T] | None = None
 	) -> ChatInvokeCompletion[T] | ChatInvokeCompletion[str]:
-		"""
-		Invoke the model with the given messages.
+		"""Invoke the model with the given messages.
 
 		Args:
 			messages: List of chat messages
@@ -156,7 +192,6 @@ class ChatOpenAI(BaseChatModel):
 		Returns:
 			Either a string response or an instance of output_format
 		"""
-
 		openai_messages = OpenAIMessageSerializer.serialize_messages(messages)
 
 		try:

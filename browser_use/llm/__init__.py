@@ -1,5 +1,4 @@
-"""
-We have switched all of our code from langchain to openai.types.chat.chat_completion_message_param.
+"""We have switched all of our code from langchain to openai.types.chat.chat_completion_message_param.
 
 For easier transition we have
 """
